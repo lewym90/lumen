@@ -5,7 +5,7 @@ import { TextBuilder } from './textbuild.js';
 const ART_RE = /^Art\.\s*(\d+[a-z]{0,3})(?:\s*[–-]\s*(\d+[a-z]{0,3}))?\.(?:\s+|$)/;
 const HEAD_RE = /^(KSIĘGA|Księga|TYTUŁ|Tytuł|CZĘŚĆ|Część|DZIAŁ|Dział|ROZDZIAŁ|Rozdział|ODDZIAŁ|Oddział)\s+([IVXLCDM]+|\d+[a-z]{0,3})\.?$/;
 const RANK = { księga: 0, tytuł: 1, część: 2, dział: 3, rozdział: 4, oddział: 5 };
-const UST_RE = /^(\d{1,3})([a-z]{0,3})\.\s+(?=\S)/;
+const UST_RE = /^(\d{1,3})([a-z]{0,3})\.(?:\s+(?=\S)|(?=\d{1,3}\)\s))/;
 const PKT_RE = /^(\d{1,3}[a-z]{0,3})\)\s+(?=\S)/;
 const LIT_RE = /^([a-z]{1,2})\)\s+(?=\S)/;
 const DASH_RE = /^[–—-]\s+(?=\S)/;
@@ -49,19 +49,22 @@ function sliceRuns(runs, n) {
   return out;
 }
 
-// oddziel kolumnę uwag na marginesie od właściwej linii
-function splitMargin(lines, W) {
-  const body = [], side = [];
+// oddziel kolumnę uwag redakcyjnych na marginesie od właściwej linii.
+// Uwaga: ostatnie słowo wyjustowanej linii też leży daleko po prawej — takie słowo MUSI zostać w tekście.
+function splitMargin(lines, W, body) {
+  const out = [], side = [];
   for (const l of lines) {
-    const mSegs = l.segs.filter((s) => s.x0 > W * 0.72);
-    if (!mSegs.length) { body.push(l); continue; }
-    const rest = l.segs.filter((s) => s.x0 <= W * 0.72);
-    side.push({ y: l.y, text: mSegs.map((s) => s.text.trim()).join(' ') });
-    if (rest.length) {
-      body.push({ ...l, segs: rest, x0: rest[0].x0, x1: rest[rest.length - 1].x1, text: rest.map((s) => s.text.trim()).join('  ') });
-    }
+    const right = l.segs.filter((s) => s.x0 > W * 0.72);
+    if (!right.length) { out.push(l); continue; }
+    const left = l.segs.filter((s) => s.x0 <= W * 0.72);
+    let margin;
+    if (!left.length) margin = l.size < body - 0.8 || l.segs.every((s) => s.isBold);
+    else margin = right.every((s) => s.isBold) && !left.every((s) => s.isBold) && right.join('').length >= 0 && l.size >= body - 0.8 && right.every((s) => s.x0 > W * 0.78);
+    if (!margin) { out.push(l); continue; }
+    side.push({ y: l.y, text: right.map((s) => s.text.trim()).join(' ') });
+    if (left.length) out.push({ ...l, segs: left, x0: left[0].x0, x1: left[left.length - 1].x1, text: left.map((s) => s.text.trim()).join('  ') });
   }
-  return { body, side };
+  return { body: out, side };
 }
 
 export function parseLegal(pages) {
@@ -79,6 +82,11 @@ export function parseLegal(pages) {
       const m = l.text.match(new RegExp(`[${LET}]{2,}-[${LET}]{2,}`, 'g'));
       if (m) m.forEach((w) => hy.add(w.toLowerCase()));
     }
+  }
+  const known = new Set();
+  for (const p of pages) for (const l of p.lines) {
+    const tk = l.text.replace(/\s+/g, ' ').trim().split(' ');
+    tk.forEach((w, i) => { if (!(i === tk.length - 1 && w.endsWith('-'))) known.add(w.toLowerCase().replace(/^[^A-Za-ząćęłńóśźż]+|[^A-Za-ząćęłńóśźż-]+$/g, '')); });
   }
   let body = 12, best = -1;
   for (const [k, v] of sizeW) if (v > best) { best = v; body = k; }
@@ -134,10 +142,26 @@ export function parseLegal(pages) {
     const t = tb.text;
     if (new RegExp(`[${LET}]-$`).test(t)) {
       const lw = (t.match(new RegExp(`([${LET}]+)-$`)) || [])[1] || '';
-      const first = joinRuns(runs).trim().match(new RegExp(`^[${LET}]+`));
-      if (lw && first && hy.has((lw + '-' + first[0]).toLowerCase())) {
-        let started = false;
-        for (const r of runs) { let s = r.t; if (!started) { s = s.replace(/^\s+/, ''); if (s) started = true; } if (s) tb.addRun(s, r.st); }
+      const jt = joinRuns(runs).trim();
+      const first = (jt.replace(/^-/, '').match(new RegExp(`^[${LET}]+`)) || [])[0] || '';
+      const startsDash = jt.startsWith('-');
+      const add = (rs, keepHy) => {
+        if (!keepHy) tb.trimEndChars(1);
+        let started = false, dashCut = startsDash;
+        for (const r of rs) {
+          let x = r.t;
+          if (!started) { x = x.replace(/^\s+/, ''); if (dashCut && x.startsWith('-')) { x = x.slice(1); dashCut = false; } if (x) started = true; }
+          if (x) tb.addRun(x, r.st);
+        }
+      };
+      if (lw && first) {
+        const comp = (lw + '-' + first).toLowerCase(), joined = (lw + first).toLowerCase();
+        let keep;
+        if (startsDash) keep = true;                       // „publiczno-” + „-prywatnego”: jeden łącznik
+        else if (known.has(comp)) keep = true;             // złożenie występujące w tekście w całości
+        else if (known.has(joined)) keep = false;          // zwykłe dzielenie wyrazu
+        else keep = /o$/i.test(lw) && lw.length >= 6 && first.length >= 8; // „opiekuńczo-wychowawczych”
+        add(runs, keep);
         return;
       }
     }
@@ -151,7 +175,7 @@ export function parseLegal(pages) {
       if (l.y > p.H * 0.9 || l.y < p.H * 0.1) { const ks = [keyOf(l.text), ...l.segs.map((s) => keyOf(s.text))]; if (ks.some((k) => (rep.get(k) || 0) >= thr)) return false; }
       return true;
     }).sort((a, b) => b.y - a.y);
-    const { body: lines, side } = splitMargin(kept, W);
+    const { body: lines, side } = splitMargin(kept, W, body);
     if (side.length) {
       side.sort((a, b) => b.y - a.y);
       const st = side.map((s) => s.text).join(' ').replace(/\s+/g, ' ').trim();
@@ -262,14 +286,14 @@ export function parseLegal(pages) {
       }
       // tiret
       const dm = text.match(DASH_RE);
-      if (dm && cur && cur.t === 'li') {
+      if (dm && cur && cur.t === 'li' && indented) {
         open('li', p.no, { o: '–', d: Math.min(3, (cur.d || 1) + 1) });
         cur.tb.addLine(sliceRuns(runs, joinRuns(runs).match(DASH_RE)[0].length));
         continue;
       }
 
       // „część wspólna” po wyliczeniu: tekst wraca do lewego marginesu po średniku/przecinku
-      if (cur && cur.t === 'li' && !indented && /[;,]$/.test(cur.tb.text) && /^[a-ząćęłńóśźż]/.test(text)) {
+      if (cur && cur.t === 'li' && !indented && ((/[;,]$/.test(cur.tb.text) && /^[a-ząćęłńóśźż]/.test(text)) || DASH_RE.test(text))) {
         open('p', p.no, { wc: 1 });
         cur.tb.addLine(runs);
         continue;

@@ -2,7 +2,7 @@
 import { db, kv } from '../db.js';
 import { buildChapters, blockWords, buildWordIndex } from './structure.js';
 import { fingerprint, uid, hashStr, yieldUI } from '../util.js';
-import { defaultProg, saveMeta, lib, bus } from '../state.js';
+import { defaultProg, saveMeta, lib, bus, dropDocCache, docProgress } from '../state.js';
 
 export const ACCEPT = '.pdf,.epub,.docx,.txt,.md,.markdown,.html,.htm,.xhtml,.text,application/pdf,application/epub+zip,text/plain,text/markdown,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
@@ -62,17 +62,9 @@ async function shrinkImage(blob, maxW = 420) {
   } catch { return blob; }
 }
 
-export async function importFile(file, onProgress = () => {}) {
-  const report = (o) => onProgress({ name: file.name, ...o });
-  report({ frac: 0.02, phase: 'Sprawdzam plik' });
-  await yieldUI();
-  const type = await sniff(file);
-  if (type === 'unknown') throw new Error('Nieobsługiwany format pliku. Obsługuję PDF, EPUB, DOCX, TXT, Markdown i HTML.');
+export const PARSER_V = 2; // zwiększ, gdy zmienia się sposób rozpoznawania struktury
 
-  const fp = await fingerprint(file);
-  const existing = [...lib.docs.values()].find((m) => m.fp === fp);
-  if (existing) return { meta: existing, duplicate: true };
-
+async function parseByType(file, type, report) {
   let parsed;
   const fileTitle = file.name.replace(/\.[^.]+$/, '').replace(/[_]+/g, ' ').trim();
   let pdfObj = null;
@@ -102,10 +94,11 @@ export async function importFile(file, onProgress = () => {}) {
     parsed = { meta: { title: r.title, author: '' }, blocks: r.blocks, entries: [], assets: [] };
   }
 
-  report({ frac: 0.92, phase: 'Wykrywam rozdziały' });
-  await yieldUI();
+  return { parsed, pdfObj, fileTitle };
+}
+
+function buildDoc(parsed, fileTitle) {
   const blocks = parsed.blocks.filter((b) => b.t === 'img' || b.t === 'page' || b.t === 'table' || (b.x && b.x.trim()));
-  // indeksy zakładek mogły się przesunąć po filtrze – zmapuj
   let entries = parsed.entries || [];
   if (blocks.length !== parsed.blocks.length) {
     const map = new Map();
@@ -115,12 +108,28 @@ export async function importFile(file, onProgress = () => {}) {
   }
   blocks.forEach((b) => { delete b._y; delete b._y1; blockWords(b); });
   if (!blocks.length) throw new Error('Nie znalazłem w tym pliku tekstu. Jeśli to skan, otwórz go w trybie stron po zaimportowaniu.');
-
   const title = (parsed.meta.title || '').trim() || fileTitle;
   const chapters = buildChapters(blocks, entries, title);
-  const doc = { blocks, chapters };
-  const cw = buildWordIndex(doc);
-  const words = cw[blocks.length];
+  const cw = buildWordIndex({ blocks, chapters });
+  return { blocks, chapters, title, cw, words: cw[blocks.length] };
+}
+
+export async function importFile(file, onProgress = () => {}) {
+  const report = (o) => onProgress({ name: file.name, ...o });
+  report({ frac: 0.02, phase: 'Sprawdzam plik' });
+  await yieldUI();
+  const type = await sniff(file);
+  if (type === 'unknown') throw new Error('Nieobsługiwany format pliku. Obsługuję PDF, EPUB, DOCX, TXT, Markdown i HTML.');
+
+  const fp = await fingerprint(file);
+  const existing = [...lib.docs.values()].find((m) => m.fp === fp);
+  if (existing) return { meta: existing, duplicate: true };
+
+  const { parsed, pdfObj, fileTitle } = await parseByType(file, type, report);
+
+  report({ frac: 0.92, phase: 'Wykrywam rozdziały' });
+  await yieldUI();
+  const { blocks, chapters, title, cw, words } = buildDoc(parsed, fileTitle);
 
   const id = uid();
   // okładka
@@ -141,7 +150,7 @@ export async function importFile(file, onProgress = () => {}) {
     pages: parsed.meta.pages || 0, words, chapterCount: chapters.length,
     addedAt: Date.now(), openedAt: 0, hue: hashStr(title) % 360,
     cover, scanned: !!parsed.scanned, pct: 0, prog: defaultProg(), deadline: null, auto: true,
-    fileName: file.name,
+    fileName: file.name, pv: PARSER_V,
   };
   await saveMeta(meta);
 
@@ -160,4 +169,93 @@ export async function importFile(file, onProgress = () => {}) {
   report({ frac: 1, phase: 'Gotowe' });
   bus.emit('library');
   return { meta, duplicate: false };
+}
+
+// ───────── ponowne przetworzenie z zapisanego oryginału ─────────
+// Zachowuje postęp, zakładki i zakreślenia (dopasowanie po treści), gdy zmienił się sposób rozpoznawania struktury.
+const NK = (s) => String(s || '').toLowerCase().replace(/[^a-ząćęłńóśźż0-9]+/g, '');
+
+export async function reimportDocument(meta, onProgress = () => {}) {
+  const blob = await db.get('files', meta.id);
+  if (!blob) throw new Error('Brak zapisanego oryginału — nie mogę ponownie przetworzyć tego pliku.');
+  const file = new File([blob], meta.fileName || (meta.title + '.' + meta.type), { type: blob.type });
+  const type = await sniff(file);
+  const report = (o) => onProgress({ name: meta.title, ...o });
+  const oldDoc = await db.get('content', meta.id);
+  const oldMarks = await db.byDoc(meta.id);
+  const { parsed, pdfObj, fileTitle } = await parseByType(file, type, report);
+  report({ frac: 0.92, phase: 'Wykrywam rozdziały' });
+  await yieldUI();
+  const nd = buildDoc(parsed, fileTitle);
+  const nb = nd.blocks;
+
+  // dopasowanie bloku starego do nowego: ta sama strona (±1) i ten sam początek tekstu
+  const byPage = new Map();
+  nb.forEach((b, i) => { const k = b.pg || 0; if (!byPage.has(k)) byPage.set(k, []); byPage.get(k).push(i); });
+  const key = (b) => (b.art ? 'art' + b.art : '') + NK(b.x).slice(0, 48);
+  const nkeys = nb.map(key);
+  const mapBlock = (oi) => {
+    const ob = oldDoc.blocks[oi];
+    if (!ob || !(ob.x || '').trim()) return null;
+    const k = key(ob);
+    if (k.length < 12) return null;
+    const cand = [];
+    for (const dp of [0, -1, 1]) for (const j of byPage.get((ob.pg || 0) + dp) || []) cand.push(j);
+    for (const j of cand) if (nkeys[j] === k) return j;
+    const tail = NK(ob.x).slice(0, 36);
+    if (tail.length >= 20) for (const j of cand) if (NK(nb[j].x).includes(tail)) return j;
+    return null;
+  };
+
+  // postęp
+  const op = meta.prog || defaultProg();
+  const np = defaultProg();
+  const doneOK = new Map(); // nowy rozdział → [wszystkie stare przeczytane?]
+  oldDoc.chapters.forEach((c) => {
+    const j = mapBlock(c.start);
+    if (j == null) return;
+    const nci = chapterIdx(nd.chapters, j);
+    const was = !!op.done[c.start];
+    doneOK.set(nci, (doneOK.get(nci) ?? true) && was);
+    const far = op.far[c.start];
+    if (far != null) { const fj = mapBlock(far); if (fj != null) { const cs = nd.chapters[chapterIdx(nd.chapters, fj)].start; np.far[cs] = Math.max(np.far[cs] ?? -1, fj); } }
+  });
+  for (const [nci, ok] of doneOK) if (ok) { const st = nd.chapters[nci].start; np.done[st] = Date.now(); np.far[st] = Math.max(np.far[st] ?? -1, (nd.chapters[nci + 1]?.start ?? nb.length) - 1); }
+  const cj = mapBlock(op.blk || 0);
+  if (cj != null) { np.blk = cj; np.ch = chapterIdx(nd.chapters, cj); np.frac = op.frac || 0; }
+  np.sec = op.sec || 0; np.words = op.words || 0;
+
+  // zakreślenia i zakładki
+  let kept = 0, lost = 0;
+  for (const m of oldMarks) {
+    const ob = oldDoc.blocks[m.b];
+    const nj = ob ? mapBlock(m.b) : null;
+    if (nj == null) { lost++; await db.del('marks', m.id); continue; }
+    if (m.kind === 'hl' && m.s != null) {
+      const snippet = (ob.x || '').slice(m.s, m.e);
+      const pos = nb[nj].x.indexOf(snippet);
+      if (!snippet || pos < 0) { lost++; await db.del('marks', m.id); continue; }
+      m.s = pos; m.e = pos + snippet.length;
+    }
+    m.b = nj;
+    await db.put('marks', m); kept++;
+  }
+
+  await db.put('content', { blocks: nb, chapters: nd.chapters, auto: JSON.parse(JSON.stringify(nd.chapters)), v: 1 }, meta.id);
+  for (const a of parsed.assets || []) await db.put('assets', a.blob, `${meta.id}/${a.key}`);
+  meta.words = nd.words; meta.chapterCount = nd.chapters.length; meta.prog = np; meta.auto = true; meta.pv = PARSER_V;
+  meta.pct = docProgress({ blocks: nb, chapters: nd.chapters, cw: nd.cw }, meta).pct;
+  if (parsed.meta?.title && meta.title === fileTitle) meta.title = nd.title;
+  await saveMeta(meta);
+  try { pdfObj?.destroy(); } catch { /* brak */ }
+  dropDocCache();
+  bus.emit('library');
+  report({ frac: 1, phase: 'Gotowe' });
+  return { kept, lost, chapters: nd.chapters.length };
+}
+
+function chapterIdx(chs, bi) {
+  let lo = 0, hi = chs.length - 1, ans = 0;
+  while (lo <= hi) { const mid = (lo + hi) >> 1; if (chs[mid].start <= bi) { ans = mid; lo = mid + 1; } else hi = mid - 1; }
+  return ans;
 }

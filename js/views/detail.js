@@ -6,6 +6,7 @@ import { coverEl, ring, progressBar, openMenu, openSheet, toast, confirmDialog, 
 import { chapterKicker, partLabel, minutesFor, pageRange, planFor, finishEstimate } from '../course.js';
 import { openDoc, renameDoc, deleteDoc } from './shared.js';
 import { pickBlock } from './blockpicker.js';
+import { PARSER_V } from '../import/importer.js';
 import { parseLabel } from '../import/structure.js';
 
 export async function mount(root, { id }) {
@@ -108,6 +109,23 @@ export async function mount(root, { id }) {
     meta.pct = p.pct;
     await saveMeta(meta);
     render();
+  }
+
+  async function reprocess() {
+    const ok = await confirmDialog({ title: 'Przetworzyć plik ponownie?', text: 'Aplikacja jeszcze raz przeczyta oryginalny plik nowszą wersją rozpoznawania struktury. Postęp, zakładki i zakreślenia zostaną przeniesione (dopasowanie po treści). Ręczne zmiany podziału na rozdziały zostaną zastąpione podziałem automatycznym.', ok: 'Przetwórz' });
+    if (!ok) return;
+    const { reimportDocument } = await import('../import/importer.js');
+    const bar = progressBar(0);
+    const ph = h('div', { class: 'ocr-ph' }, 'Czytam plik…');
+    const sheet = openSheet({ title: 'Przetwarzanie pliku', body: h('div', {}, ph, bar) });
+    try {
+      const r = await reimportDocument(meta, (p) => { ph.textContent = p.phase || ''; const i = bar.querySelector('i'); if (i) i.style.width = Math.round((p.frac || 0) * 100) + '%'; });
+      sheet.close();
+      const nd = await loadDoc(id);
+      doc.blocks = nd.blocks; doc.chapters = nd.chapters; doc.auto = nd.auto; doc.cw = nd.cw;
+      toast(r.lost ? `Gotowe. Nie udało się przenieść ${r.lost} zakreśleń lub zakładek.` : 'Gotowe — plik przetworzony ponownie', { icon: 'check-circle', ms: 4000 });
+      render();
+    } catch (e) { sheet.close(); toast(e.message || 'Nie udało się przetworzyć pliku', { error: true }); }
   }
 
   async function startOcr() {
@@ -216,6 +234,7 @@ export async function mount(root, { id }) {
       { icon: 'edit', label: 'Zmień tytuł', onClick: async () => { await renameDoc(meta); render(true); } },
       { icon: 'scissors', label: editing ? 'Zakończ poprawianie podziału' : 'Popraw podział na rozdziały', onClick: () => { editing = !editing; render(true); } },
       { icon: 'refresh', label: 'Przywróć podział automatyczny', onClick: resetStructure },
+      ...(meta.type !== 'unknown' ? [{ icon: 'refresh', label: 'Przetwórz plik ponownie', onClick: reprocess }] : []),
       'hr',
       { icon: 'trash', label: 'Usuń z biblioteki', danger: true, onClick: async () => { if (await deleteDoc(meta)) location.hash = '#/library'; } },
     ]) });
@@ -263,6 +282,7 @@ export async function mount(root, { id }) {
 
     const notice = [];
     if (meta.scanned) notice.push(h('div', { class: 'notice acc' }, h('span', { html: ic('info') }), 'To skan bez warstwy tekstowej — strony są obrazami. Rozpoznanie tekstu (OCR) zamieni je na zwykły tekst z rozdziałami, zakreślaniem, szukaniem i czytaniem na głos. Działa na Twoim urządzeniu, offline.', h('button', { class: 'btn sm primary', onclick: startOcr }, 'Rozpoznaj tekst')));
+    if (meta.type === 'pdf' && !meta.scanned && (meta.pv || 0) < PARSER_V) notice.push(h('div', { class: 'notice acc' }, h('span', { html: ic('info') }), 'Ten dokument został zaimportowany starszą wersją aplikacji. Nowa wersja dokładniej rozpoznaje strukturę i treść (m.in. artykuły, ustępy, dzielenie wyrazów). Przetworzenie zachowa Twój postęp i zakreślenia.', h('button', { class: 'btn sm primary', onclick: reprocess }, 'Przetwórz ponownie')));
     if (editing) notice.push(h('div', { class: 'notice acc' }, h('span', { html: ic('scissors') }), 'Poprawianie podziału: w menu rozdziału (⋯) zmienisz nazwę, podzielisz go w dowolnym miejscu, przesuniesz początek albo scalisz z sąsiednim. Rozwiń rozdział strzałką, by utworzyć nowy od nagłówka.', h('button', { class: 'btn sm', onclick: () => { editing = false; render(true); } }, 'Gotowe')));
 
     page.replaceChildren(

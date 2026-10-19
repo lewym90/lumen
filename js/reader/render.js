@@ -58,7 +58,7 @@ export function blockHtml(b, i, ctx) {
     case 'h': {
       const l = Math.min(4, Math.max(1, b.l || 2));
       const tag = l <= 2 ? 'h2' : l === 3 ? 'h3' : 'h4';
-      if (b.hk && b.ht && !hls && !hits) return `<${tag} class="hd lg-h l${l}${bm}" data-b="${i}" data-t><span class="lg-hk">${esc(b.hn)}</span><span class="lg-ht">${esc(b.ht)}</span></${tag}>`;
+      if (b.hk && b.ht && !hls && !hits) return `<${tag} class="hd lg-h l${l}${bm}" data-b="${i}" data-t><span class="lg-hk">${esc(b.hn)}</span> <span class="lg-ht">${esc(b.ht)}</span></${tag}>`;
       return `<${tag} class="hd l${l}${bm}" data-b="${i}" data-t>${txt()}</${tag}>`;
     }
     case 'li':
