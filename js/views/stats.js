@@ -1,4 +1,4 @@
-// Postępy: czas czytania, seria, tempo, mapa aktywności, postęp w kursach
+// Postępy: czas czytania, seria, tempo, mapa aktywności, postęp w dokumentach
 import { h, ic, plural, fmtMinutes, fmtNum, dayKey, addDays } from '../util.js';
 import { stats, settings, listDocs, loadDoc, streak, todaySeconds, lastDays, docProgress, continueTarget, bus, wordsToMinutes } from '../state.js';
 import { ring, countUp, coverEl } from '../ui.js';
@@ -71,7 +71,7 @@ export async function mount(root) {
       const left = wordsToMinutes(p.total - p.read);
       rows.push(h('button', { class: 'prog-row', onclick: () => openPlan(m.id) },
         h('div', { class: 'pr-cover' }, coverEl(m)),
-        h('div', { class: 'pr-main' }, h('b', {}, m.title), h('small', {}, p.pct >= 0.99 ? 'Ukończono' : `${chapterKicker(doc.chapters[ci]) || 'Rozdział ' + (ci + 1)} · zostało ~${fmtMinutes(left)}`)),
+        h('div', { class: 'pr-main' }, h('b', {}, m.title), h('small', {}, p.pct >= 0.99 ? 'Przeczytano' : `${chapterKicker(doc.chapters[ci]) || 'Rozdział ' + (ci + 1)} · zostało ~${fmtMinutes(left)}`)),
         ring({ size: 52, stroke: 6, pct: p.pct, inner: h('span', { class: 'pr-n' }, Math.round(p.pct * 100) + '%') })));
     }
 
@@ -88,8 +88,8 @@ export async function mount(root) {
         chart),
       h('section', { class: 'card heat-card' }, h('div', { class: 'sec-h' }, h('h3', {}, 'Mapa regularności'), h('small', { class: 'dim' }, 'ostatnie 18 tygodni')), h('div', { class: 'heat' }, cells)),
       h('section', { class: 'prog-sec' },
-        h('div', { class: 'sec-h' }, h('h3', {}, 'Twoje kursy'), h('small', { class: 'dim' }, `${doneDocs} z ${docs.length} ukończone`)),
-        rows.length ? h('div', { class: 'prog-list' }, rows) : h('div', { class: 'empty small' }, h('p', {}, 'Po dodaniu dokumentu zobaczysz tu postęp w każdym kursie.'))));
+        h('div', { class: 'sec-h' }, h('h3', {}, 'Twoje dokumenty'), h('small', { class: 'dim' }, `${doneDocs} z ${docs.length} przeczytane`)),
+        rows.length ? h('div', { class: 'prog-list' }, rows) : h('div', { class: 'empty small' }, h('p', {}, 'Po dodaniu dokumentu zobaczysz tu postęp w każdym dokumencie.'))));
   }
 
   await render();

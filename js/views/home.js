@@ -1,4 +1,4 @@
-// Pulpit: kontynuacja kursu, cel dnia, następne rozdziały
+// Pulpit: kontynuacja czytania, cel dnia, następne rozdziały
 import { h, ic, greeting, plural, fmtMinutes, dayKey, fmtNum } from '../util.js';
 import { listDocs, loadDoc, stats, settings, streak, todaySeconds, lastDays, bus, docProgress, continueTarget, wordsToMinutes } from '../state.js';
 import { coverEl, ring, progressBar, attachTilt, countUp } from '../ui.js';
@@ -9,7 +9,7 @@ import { pickFiles } from '../main.js';
 const WEEKDAYS = ['nd', 'pn', 'wt', 'śr', 'cz', 'pt', 'sb'];
 
 function emptyState() {
-  const feats = [['book-open', 'Rozdziały i spis treści rozpoznawane automatycznie'], ['clock', 'Pamięta, gdzie skończyłeś — co do akapitu'], ['target', 'Prowadzi Cię przez kurs, rozdział po rozdziale'], ['shield', 'Wszystko zostaje na Twoim urządzeniu']];
+  const feats = [['book-open', 'Rozdziały i spis treści rozpoznawane automatycznie'], ['clock', 'Pamięta, gdzie skończyłeś — co do akapitu'], ['target', 'Czytasz rozdział po rozdziale i nigdy nie gubisz miejsca'], ['shield', 'Wszystko zostaje na Twoim urządzeniu']];
   return h('section', { class: 'hero-empty' },
     h('div', { class: 'he-art', 'aria-hidden': 'true' },
       h('div', { class: 'floatbook b1' }, h('span', { html: ic('file-lines') })),
@@ -19,7 +19,7 @@ function emptyState() {
     h('div', { class: 'he-txt' },
       h('div', { class: 'kicker' }, 'Zacznijmy'),
       h('h1', { class: 'display' }, 'Wrzuć swój pierwszy dokument'),
-      h('p', { class: 'muted lead' }, 'Kurs, podręcznik, ebook, notatki. Lumen podzieli go na rozdziały, zapamięta miejsce, w którym skończyłeś, i poprowadzi Cię do końca.'),
+      h('p', { class: 'muted lead' }, 'Książka, raport, skrypt, podręcznik, notatki. Lumen podzieli go na rozdziały, zapamięta miejsce, w którym skończyłeś, i pomoże Ci dotrzeć do końca.'),
       h('div', { class: 'he-actions' },
         h('button', { class: 'btn primary lg', onclick: () => pickFiles() }, h('span', { html: ic('upload') }), 'Wybierz plik'),
         h('span', { class: 'dim he-hint' }, 'albo przeciągnij go tutaj')),
@@ -70,7 +70,7 @@ async function heroCard(meta) {
     h('div', { class: 'hero-glow' }),
     h('div', { class: 'hero-cover' }, cover),
     h('div', { class: 'hero-body' },
-      h('div', { class: 'kicker acc' }, started ? 'Kontynuuj naukę' : 'Zacznij kurs'),
+      h('div', { class: 'kicker acc' }, started ? 'Kontynuuj czytanie' : 'Zacznij czytać'),
       h('div', { class: 'hero-doc dim' }, meta.title),
       h('div', { class: 'hero-ch' }, kick ? h('span', { class: 'hk' }, kick, ch.part ? ` · ${partLabel(ch)}` : '') : (ch.part ? h('span', { class: 'hk' }, partLabel(ch)) : null)),
       h('h2', { class: 'display hero-title' }, ch.title),
@@ -78,10 +78,10 @@ async function heroCard(meta) {
         h('span', { html: `${ic('clock')} ${x.read > 0 ? `jeszcze ~${fmtMinutes(minsLeft)}` : `~${fmtMinutes(minutesFor(x.words))}`}` }),
         h('span', { html: `${ic('layers')} ${ci + 1} z ${doc.chapters.length}` }),
         plan.minPerDay ? h('span', { class: 'plan', html: `${ic('calendar')} ${plan.minPerDay} min dziennie do ${new Date(meta.deadline).toLocaleDateString('pl-PL', { day: 'numeric', month: 'short' })}` }) : null),
-      h('div', { class: 'hero-prog' }, progressBar(x.pct), h('span', {}, `${Math.round(p.pct * 100)}% kursu`)),
+      h('div', { class: 'hero-prog' }, progressBar(x.pct), h('span', {}, `${Math.round(p.pct * 100)}% przeczytane`)),
       h('div', { class: 'hero-actions' },
         h('button', { class: 'btn primary lg', onclick: () => openDoc(meta.id) }, started ? 'Czytaj dalej' : 'Zaczynamy', h('span', { html: ic('arrow-right') })),
-        h('button', { class: 'btn lg', onclick: () => openPlan(meta.id) }, h('span', { html: ic('layers') }), 'Plan kursu'))));
+        h('button', { class: 'btn lg', onclick: () => openPlan(meta.id) }, h('span', { html: ic('layers') }), 'Spis rozdziałów'))));
   attachTilt(cover);
   return wrap;
 }
@@ -97,7 +97,7 @@ async function upNext(meta) {
   }
   if (!rows.length) return null;
   return h('section', { class: 'upnext' },
-    h('div', { class: 'sec-h' }, h('h3', {}, 'Następne w kursie'), h('button', { class: 'btn ghost sm', onclick: () => openPlan(meta.id) }, 'Cały plan', h('span', { html: ic('arrow-right') }))),
+    h('div', { class: 'sec-h' }, h('h3', {}, 'Dalej w dokumencie'), h('button', { class: 'btn ghost sm', onclick: () => openPlan(meta.id) }, 'Wszystkie rozdziały', h('span', { html: ic('arrow-right') }))),
     h('div', { class: 'un-list' }, rows.map((i, k) => {
       const ch = doc.chapters[i];
       return h('button', { class: 'un-row', style: { '--d': k * 70 + 'ms' }, onclick: () => { location.hash = `#/read/${meta.id}?c=${i}`; } },

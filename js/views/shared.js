@@ -30,7 +30,7 @@ export async function deleteDoc(meta) {
 export function docMenu(anchor, meta, { onChange } = {}) {
   openMenu(anchor, [
     { icon: 'book-open', label: 'Czytaj', onClick: () => openDoc(meta.id) },
-    { icon: 'layers', label: 'Plan kursu i rozdziały', onClick: () => openPlan(meta.id) },
+    { icon: 'layers', label: 'Spis treści i rozdziały', onClick: () => openPlan(meta.id) },
     'hr',
     { icon: 'edit', label: 'Zmień tytuł', onClick: async () => { await renameDoc(meta); onChange && onChange(); } },
     { icon: 'trash', label: 'Usuń z biblioteki', danger: true, onClick: async () => { if (await deleteDoc(meta)) onChange && onChange(); } },
@@ -43,7 +43,7 @@ export function docCard(meta, { onChange, compact = false } = {}) {
   const p = meta.prog || {};
   const doneCount = Object.keys(p.done || {}).length;
   const finished = pct >= 99 || (total && doneCount >= total);
-  const sub = finished ? 'Ukończono' : pct > 0 ? `${doneCount} z ${total} ${plural(total, 'rozdziału', 'rozdziałów', 'rozdziałów')}` : `${total} ${plural(total, 'rozdział', 'rozdziały', 'rozdziałów')}`;
+  const sub = finished ? 'Przeczytano' : pct > 0 ? `${doneCount} z ${total} ${plural(total, 'rozdziału', 'rozdziałów', 'rozdziałów')}` : `${total} ${plural(total, 'rozdział', 'rozdziały', 'rozdziałów')}`;
   const card = h('a', { class: 'doc-card' + (compact ? ' compact' : ''), href: '#/doc/' + meta.id, 'aria-label': meta.title });
   const cv = coverEl(meta);
   const ringWrap = h('div', { class: 'dc-cover' }, cv);

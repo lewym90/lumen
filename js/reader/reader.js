@@ -99,7 +99,7 @@ function buildDom() {
 
   const tool = (name, icon, label, onClick) => h('button', { class: 'icon-btn', 'data-tool': name, 'aria-label': label, title: label, onclick: onClick, html: ic(icon) });
 
-  const back = h('button', { class: 'icon-btn r-back', 'aria-label': 'Wróć do planu kursu', title: 'Wróć', html: ic('left'), onclick: () => { location.hash = '#/doc/' + meta.id; } });
+  const back = h('button', { class: 'icon-btn r-back', 'aria-label': 'Wróć do spisu rozdziałów', title: 'Wróć', html: ic('left'), onclick: () => { location.hash = '#/doc/' + meta.id; } });
   R.titleKick = h('div', { class: 'r-kick' });
   R.titleMain = h('div', { class: 'r-ttl' });
   R.statEl = h('div', { class: 'r-stat' });
@@ -245,9 +245,9 @@ function finishHtml(ci, info, next) {
     <p class="fin-sub" data-fin-sub>${esc(finSub(p))}</p>
     ${next ? `<button class="fin-next" data-act="next"><span class="fn-k">Następny rozdział${next.num ? ' · ' + esc(((next.kw || 'Rozdział') + ' ' + next.num)) : ''}</span><span class="fn-t">${esc(next.title)}</span><span class="fn-m">${ic('clock')} ~${fmtMinutes(minutesFor(R.doc.cw[chapterEnd(doc, ci + 1)] - R.doc.cw[next.start]))}</span><span class="fn-go">${ic('arrow-right')}</span></button>` : ''}
     <div class="fin-actions">
-      <button class="btn mark-done" data-act="markdone" hidden>${ic('check-circle')} Zaliczam ten rozdział</button>
+      <button class="btn mark-done" data-act="markdone" hidden>${ic('check-circle')} Oznacz jako przeczytany</button>
       <button class="btn ghost" data-act="rest">${ic('moon')} Kończę na dziś</button>
-      ${next ? '' : `<button class="btn primary" data-act="plan">${ic('layers')} Wróć do planu kursu</button>`}
+      ${next ? '' : `<button class="btn primary" data-act="plan">${ic('layers')} Wróć do spisu rozdziałów</button>`}
     </div>
   </footer>`;
 }
@@ -255,8 +255,8 @@ function finishHtml(ci, info, next) {
 function finSub(p) {
   const { doc } = R;
   const n = doc.chapters.length;
-  if (p.done >= n) return 'Ukończyłeś cały kurs. Gratulacje!';
-  return `Ukończono ${p.done} z ${n} ${plural(n, 'rozdziału', 'rozdziałów', 'rozdziałów')} · ${Math.round(p.pct * 100)}% kursu`;
+  if (p.done >= n) return 'Przeczytałeś cały dokument. Gratulacje!';
+  return `Przeczytano ${p.done} z ${n} ${plural(n, 'rozdziału', 'rozdziałów', 'rozdziałów')} · ${Math.round(p.pct * 100)}% dokumentu`;
 }
 
 function updateTitle() {
@@ -462,7 +462,7 @@ function onReachEnd() {
     markBtn.hidden = false;
     fin.classList.add('skipped');
     fin.querySelector('.fin-h').textContent = 'Doszedłeś do końca';
-    fin.querySelector('[data-fin-sub]').textContent = 'Przewinąłeś ten rozdział bardzo szybko — czy chcesz go zaliczyć?';
+    fin.querySelector('[data-fin-sub]').textContent = 'Przewinąłeś ten rozdział bardzo szybko — czy oznaczyć go jako przeczytany?';
   }
   void ch; void meta;
 }
@@ -483,7 +483,7 @@ function markDone(celebrate) {
   fin.classList.add('done');
   fin.querySelector('.mark-done')?.setAttribute('hidden', '');
   const last = ci === doc.chapters.length - 1 || p.done >= doc.chapters.length;
-  fin.querySelector('.fin-h').textContent = p.done >= doc.chapters.length ? 'Kurs ukończony!' : 'Rozdział ukończony';
+  fin.querySelector('.fin-h').textContent = p.done >= doc.chapters.length ? 'Dokument przeczytany!' : 'Rozdział przeczytany';
   fin.querySelector('[data-fin-sub]').textContent = finSub(p);
   if (celebrate && !wasDone) {
     sparkBurst(fin.querySelector('.fin-badge'), p.done >= doc.chapters.length ? 46 : 26);

@@ -1,4 +1,4 @@
-// Logika „kursu”: etykiety rozdziałów, czasy, plan dnia
+// Logika czytania: etykiety rozdziałów, czasy, plan dnia
 import { stats, wordsToMinutes, chapterInfo, docProgress, continueTarget, currentChapter } from './state.js';
 import { fmtMinutes, fmtNum, plural, addDays } from './util.js';
 

@@ -11,7 +11,7 @@ const SORTS = [
   ['progress', 'Postęp'],
   ['added', 'Ostatnio dodane'],
 ];
-const FILTERS = [['all', 'Wszystkie'], ['active', 'W trakcie'], ['new', 'Nieprzeczytane'], ['done', 'Ukończone']];
+const FILTERS = [['all', 'Wszystkie'], ['active', 'W trakcie'], ['new', 'Nieprzeczytane'], ['done', 'Przeczytane']];
 
 const pref = (() => { try { return JSON.parse(localStorage.getItem('lumen.lib') || '{}'); } catch { return {}; } })();
 const savePref = () => { try { localStorage.setItem('lumen.lib', JSON.stringify(pref)); } catch { /* brak */ } };

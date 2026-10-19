@@ -1,4 +1,4 @@
-// Plan kursu: przegląd dokumentu, rozdziały, korekta podziału, termin
+// Spis treści i rozdziały: przegląd dokumentu, rozdziały, korekta podziału, termin
 import { h, ic, plural, fmtMinutes, fmtNum, fmtDate, addDays, dayKey } from '../util.js';
 import { getMeta, loadDoc, saveMeta, saveContent, docProgress, continueTarget, chapterInfo, stats, settings, bus, wordsToMinutes } from '../state.js';
 import { sectionsOf, chapterEnd, buildWordIndex } from '../import/structure.js';
@@ -147,7 +147,7 @@ export async function mount(root, { id }) {
 
     // Pierścień
     const num = h('b', {}, '0');
-    const rg = ring({ size: 132, stroke: 11, pct: p.pct, inner: h('div', { class: 'rg-in' }, num, h('small', {}, 'ukończono')) });
+    const rg = ring({ size: 132, stroke: 11, pct: p.pct, inner: h('div', { class: 'rg-in' }, num, h('small', {}, 'przeczytano')) });
     countUp(num, Math.round(p.pct * 100), { fmt: (v) => Math.round(v) + '%' });
 
     const stat = (icon, val, label) => h('div', { class: 'stat' }, h('span', { class: 'stat-ic', html: ic(icon) }), h('b', {}, val), h('small', {}, label));
@@ -163,10 +163,10 @@ export async function mount(root, { id }) {
 
     const cta = finished
       ? h('button', { class: 'btn primary lg', onclick: () => toRead(0) }, h('span', { html: ic('refresh') }), 'Przeczytaj jeszcze raz')
-      : h('button', { class: 'btn primary lg', onclick: () => toRead(cIdx) }, started ? 'Kontynuuj' : 'Zacznij kurs', h('span', { html: ic('arrow-right') }));
+      : h('button', { class: 'btn primary lg', onclick: () => toRead(cIdx) }, started ? 'Kontynuuj' : 'Zacznij czytać', h('span', { html: ic('arrow-right') }));
 
     // planer
-    const pick = h('input', { class: 'field', type: 'date', value: meta.deadline || '', min: dayKey(), 'aria-label': 'Termin ukończenia',
+    const pick = h('input', { class: 'field', type: 'date', value: meta.deadline || '', min: dayKey(), 'aria-label': 'Chcę skończyć do',
       onchange: async (e) => { meta.deadline = e.target.value || null; await saveMeta(meta); render(true); } });
     const quick = [7, 14, 30].map((d) => h('button', { class: 'chip', onclick: async () => { meta.deadline = dayKey(addDays(new Date(), d)); await saveMeta(meta); render(true); } }, `${d} dni`));
     const per = finishEstimate(plan.minLeft, settings.goalMin);
@@ -177,12 +177,12 @@ export async function mount(root, { id }) {
         h('button', { class: 'btn ghost sm', onclick: async () => { meta.deadline = null; await saveMeta(meta); render(true); } }, 'Usuń termin'))
       : h('div', { class: 'plan-out' },
         h('div', { class: 'plan-big' }, h('b', {}, per.days), ` ${plural(per.days, 'dzień', 'dni', 'dni')}`),
-        h('div', { class: 'muted' }, finished ? 'Kurs ukończony.' : `Tyle zajmie dokończenie przy ${settings.goalMin} min dziennie i Twoim tempie ${fmtNum(stats.wpm)} słów/min (do ${fmtDate(per.date)}).`));
+        h('div', { class: 'muted' }, finished ? 'Dokument przeczytany.' : `Tyle zajmie dokończenie przy ${settings.goalMin} min dziennie i Twoim tempie ${fmtNum(stats.wpm)} słów/min (do ${fmtDate(per.date)}).`));
 
     const planCard = h('section', { class: 'card plan-card' },
       h('div', { class: 'kicker' }, 'Plan'),
       planBody,
-      h('div', { class: 'plan-set' }, h('label', { class: 'dim sm' }, 'Termin ukończenia'), pick, h('div', { class: 'chips' }, quick)));
+      h('div', { class: 'plan-set' }, h('label', { class: 'dim sm' }, 'Chcę skończyć do'), pick, h('div', { class: 'chips' }, quick)));
 
     // lista rozdziałów, pogrupowana w części
     const list = h('div', { class: 'ch-list' + (editing ? ' editing' : '') });
@@ -218,7 +218,7 @@ export async function mount(root, { id }) {
           h('div', { class: 'stats-row' },
             stat('layers', fmtNum(doc.chapters.length), plural(doc.chapters.length, 'rozdział', 'rozdziały', 'rozdziałów')),
             stat('clock', fmtMinutes(wordsToMinutes(p.total)), 'czytania'),
-            stat('check-circle', `${p.done}/${doc.chapters.length}`, 'ukończone')),
+            stat('check-circle', `${p.done}/${doc.chapters.length}`, 'przeczytane')),
           h('div', { class: 'dh-actions' }, cta, finished ? null : h('span', { class: 'dim next-hint' }, `${chapterKicker(doc.chapters[cIdx]) || 'Dalej'}: ${doc.chapters[cIdx].title}`))),
         h('div', { class: 'dh-ring' }, rg)),
       ...notice,

@@ -1,5 +1,5 @@
 /* Lumen — service worker: działanie offline, aktualizacje i przyjmowanie plików z „Udostępnij” */
-const VERSION = 'lumen-v1.0.2';
+const VERSION = 'lumen-v1.0.3';
 const SHELL = `${VERSION}-shell`;
 const RUNTIME = `${VERSION}-runtime`;
 const SHARE = 'lumen-share';

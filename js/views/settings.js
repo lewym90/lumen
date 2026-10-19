@@ -78,7 +78,7 @@ export async function mount(root) {
               ['[  ]', 'poprzedni / następny rozdział'], ['T', 'spis treści'], ['N', 'notatki i zakładki'], ['/', 'szukaj w dokumencie'],
               ['A', 'wygląd tekstu'], ['L', 'czytaj na głos'], ['F', 'tryb skupienia'], ['B', 'zakładka'], ['Esc', 'zamknij panel / wyjdź'],
             ].map(([k, d]) => h('div', { class: 'key-row' }, h('kbd', {}, k), h('span', {}, d))))),
-          h('div', { class: 'about dim' }, h('svg', { class: 'logo', viewBox: '0 0 64 64', width: 34, height: 34, html: '<use href="#i-logo"/>' }), h('div', {}, h('b', {}, 'Lumen 1.0'), h('div', {}, 'Czytnik i przewodnik po kursach · działa offline'))))));
+          h('div', { class: 'about dim' }, h('svg', { class: 'logo', viewBox: '0 0 64 64', width: 34, height: 34, html: '<use href="#i-logo"/>' }), h('div', {}, h('b', {}, 'Lumen 1.0'), h('div', {}, 'Czytnik dokumentów i książek · działa offline'))))));
   };
   render();
   void listDocs; void stats; void fmtNum; void confirmDialog;

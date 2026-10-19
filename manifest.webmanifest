@@ -1,8 +1,8 @@
 {
   "id": "./",
-  "name": "Lumen — czytnik i przewodnik po kursach",
+  "name": "Lumen — czytnik dokumentów i książek",
   "short_name": "Lumen",
-  "description": "Czytnik dokumentów, ebooków i kursów, który pamięta, gdzie skończyłeś, i prowadzi Cię rozdział po rozdziale.",
+  "description": "Czytnik dokumentów i książek, który pamięta, gdzie skończyłeś, i prowadzi Cię rozdział po rozdziale.",
   "lang": "pl",
   "dir": "ltr",
   "start_url": "./",
