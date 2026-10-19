@@ -581,7 +581,27 @@ function toggleFocus() {
   R.focus = !R.focus;
   R.root.classList.toggle('focus', R.focus);
   setChrome(!R.focus);
-  toast(R.focus ? 'Tryb skupienia · Esc lub F, aby wyjść' : 'Tryb skupienia wyłączony', { icon: R.focus ? 'minimize' : 'maximize', ms: 2200 });
+  R.focusExit?.remove(); R.focusExit = null;
+  if (R.focus) buildFocusExit();
+  const touch = matchMedia('(hover: none)').matches;
+  toast(R.focus ? (touch ? 'Tryb skupienia · dotknij kreski u góry, aby wyjść' : 'Tryb skupienia · Esc lub F, aby wyjść') : 'Tryb skupienia wyłączony', { icon: R.focus ? 'minimize' : 'maximize', ms: 2600 });
+}
+
+// Wyjście z trybu skupienia na dotyku: dyskretna kreska u góry; pierwsze
+// dotknięcie ją rozwija, dopiero drugie (w ciągu 3 s) kończy tryb.
+function buildFocusExit() {
+  const b = h('button', { class: 'focus-exit', type: 'button', 'aria-label': 'Wyjdź z trybu skupienia' }, [h('i', { class: 'fe-bar' }), h('span', { class: 'fe-txt' }, 'Wyjdź z trybu skupienia')]);
+  let timer = 0;
+  b.addEventListener('click', e => {
+    e.stopPropagation();
+    if (b.classList.contains('armed')) { clearTimeout(timer); toggleFocus(); return; }
+    b.classList.add('armed');
+    timer = setTimeout(() => b.classList.remove('armed'), 3000);
+  });
+  b.addEventListener('pointerdown', e => e.stopPropagation());
+  b.addEventListener('touchend', e => e.stopPropagation());
+  R.root.append(b);
+  R.focusExit = b;
 }
 
 // ───────────── panele ─────────────
