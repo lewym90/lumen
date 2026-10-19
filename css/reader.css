@@ -326,3 +326,24 @@ mark.hit.cur { background: var(--accent); color: var(--accent-ink); box-shadow: 
 }
 @media (hover: none) { .hl:hover { filter: none; } }
 @media print { .r-top, .r-bottom, .r-panel, .r-listen { display: none !important; } .reader { position: static; } .r-scroll { position: static; overflow: visible; } }
+
+.toc-tools { padding: 2px 14px 4px 20px; }
+.toc-split { width: 100%; justify-content: center; }
+
+/* ustawienia czytania na głos */
+.ls { display: grid; gap: 10px; font-family: var(--font-ui); }
+.ls-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; font-weight: 650; letter-spacing: .04em; color: var(--text-2); margin-top: 8px; }
+.ls-row b { color: var(--text); font-variant-numeric: tabular-nums; }
+.ls input[type=range] { width: 100%; accent-color: var(--accent); }
+.ls-sw { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 14px; border-radius: 14px; background: var(--surface-2); border: 1px solid var(--line); font-size: 14px; cursor: pointer; }
+.ls-sw small { display: block; color: var(--text-3); font-size: 12px; margin-top: 2px; }
+.ls-sw input { width: 20px; height: 20px; accent-color: var(--accent); flex: none; }
+.ls-seg { display: flex; }
+.ls-seg button { flex: 1; }
+.ls-warn { color: #f0b429; font-size: 13px; margin: 0; }
+.ls-voices { display: grid; gap: 4px; max-height: 38vh; overflow-y: auto; }
+.ls-v { display: flex; align-items: center; gap: 10px; text-align: left; padding: 10px 12px; border-radius: 12px; font-size: 14px; color: var(--text-2); }
+.ls-v small { color: var(--text-3); margin-left: auto; }
+.ls-v:hover { background: var(--surface-2); }
+.ls-v.on { background: rgba(var(--accent-rgb), .14); color: var(--text); }
+.ls-v i .ic { width: 16px; height: 16px; color: var(--accent); }

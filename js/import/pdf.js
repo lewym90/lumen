@@ -12,7 +12,7 @@ const MONO_RE = /mono|courier|consolas|menlo|typewriter|lucida console|\bcode\b/
 
 const GLYPH_RE = /^[•●○◦▪▫■□◆◇◘‣∙·▶►➤➢✓✔✗→-]\s*/;
 const DASH_RE = /^[–—−-]\s+/;
-const NUM_RE = /^(\(?\d{1,3}[.)])\s+/;
+const NUM_RE = /^(\(?\d{1,3}[a-z]{0,2}[.)])\s+/;
 const ALPHA_RE = /^(\(?[a-z][.)])\s+/;
 const HEADNUM_RE = /^(\d{1,2}(?:\.\d{1,2}){0,3})\.?\s+\S/;
 const PAGENUM_RE = /^(\d{1,4}|[ivxlcdm]{1,7}|[-–—]\s*\d+\s*[-–—]|(?:strona|str\.|page|s\.)\s*\d+(?:\s*(?:z|of|\/)\s*\d+)?|\d+\s*(?:z|of|\/)\s*\d+)$/i;
@@ -785,6 +785,11 @@ export async function parsePdf(file, onProgress = () => {}) {
     return { meta, blocks, entries, scanned: true };
   }
 
+  return structurePages(pdf, pages, meta, n, onProgress);
+}
+
+// Wspólna część: z linii tekstu (z PDF-a lub z OCR) budujemy bloki i wpisy spisu treści
+export async function structurePages(pdf, pages, meta, n, onProgress = () => {}) {
   if (detectLegal(pages)) {
     const lg = parseLegal(pages);
     if (lg.blocks.length > 20) {

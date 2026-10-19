@@ -24,6 +24,10 @@ Dodając nowy plik do aplikacji, dopisz go do listy `PRECACHE` w `sw.js`.
 - Pamięć pozycji co do akapitu, spis rozdziałów z terminem, seria dni i cel dzienny.
 - Zakreślenia w 5 kolorach, notatki, zakładki, eksport do Markdown, wyszukiwanie w całym dokumencie.
 - Czytanie na głos z podświetlaniem zdań, tryb skupienia, 5 motywów, 5 akcentów, 4 kroje pisma.
+- Akty prawne (ustawy, rozporządzenia): działy, rozdziały, artykuły, ustępy, punkty, skok do „Art. N”.
+- OCR skanów działa lokalnie (silnik w `vendor/tesseract`, ~12 MB pobierane przy pierwszym użyciu i zapamiętywane offline).
+- Edytor podziału: zmiana nazwy/numeru, dzielenie w dowolnym miejscu (też z czytnika), przesuwanie początku, scalanie, powrót do podziału automatycznego.
+- Czytanie na głos: rozwijanie skrótów (art., ust., Dz. U.), zapowiedzi „Artykuł 5, ustęp 2”, wybór głosu i tempa, minutnik, kolejne rozdziały, sterowanie z ekranu blokady.
 - Podgląd oryginalnej strony PDF dla diagramów i tabel; kopia zapasowa postępu (JSON).
 
 ## Skróty klawiaturowe

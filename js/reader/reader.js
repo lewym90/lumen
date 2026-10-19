@@ -1,10 +1,10 @@
 // Czytnik: rozdział jako sesja, pozycja, zakreślenia, szukanie, czytanie na głos
 import { h, ic, esc, clamp, debounce, throttleRaf, uid, foldText, fmtMinutes, fmtNum, plural, downloadBlob, raf, sleep } from '../util.js';
 import { db } from '../db.js';
-import { settings, setSetting, bus, loadDoc, saveMeta, chapterInfo, docProgress, addReading, stats, wordsToMinutes, defaultProg } from '../state.js';
-import { chapterEnd, sectionsOf, chapterOfBlock, blockWords } from '../import/structure.js';
+import { settings, setSetting, bus, loadDoc, saveMeta, saveContent, chapterInfo, docProgress, addReading, stats, wordsToMinutes, defaultProg } from '../state.js';
+import { chapterEnd, sectionsOf, chapterOfBlock, blockWords, buildWordIndex } from '../import/structure.js';
 import { chapterKicker, chapterFull, partLabel, minutesFor } from '../course.js';
-import { toast, openSheet, openMenu, ring, sparkBurst, closeMenu } from '../ui.js';
+import { toast, openSheet, openMenu, ring, sparkBurst, closeMenu, promptDialog } from '../ui.js';
 import { applyReadingVars, buildAppearance } from './appearance.js';
 import { chapterBodyHtml, openerHtml, textHtml, blockHtml } from './render.js';
 import { openPageViewer, openFigureZoom, observeScanPages, observeFigures, releasePdf } from './pageview.js';
@@ -214,6 +214,7 @@ async function renderChapter(ci, pos = null, { first = false } = {}) {
   handleScroll();
   if (first) R.lastWordPos = null;
   meta.prog.ch = ci;
+  if (R.autoListen) { R.autoListen = false; ensureNarrator().start(R.pos.bi, R.endBlock); }
 }
 
 function makeCtx(ci) {
@@ -607,6 +608,7 @@ function buildToc() {
       location.hash = `#/read/${meta.id}?b=${bi}`;
     } }, h('span', {}, 'Art.'), input, h('button', { class: 'btn sm', type: 'submit' }, 'Idź'));
   }
+  const splitBtn = h('button', { class: 'btn sm ghost toc-split', onclick: splitHere }, h('span', { html: ic('scissors') }), 'Podziel rozdział tutaj');
   let lastPart = null;
   infos.forEach((x, i) => {
     const part = x.c.part || '';
@@ -622,8 +624,31 @@ function buildToc() {
       if (secs.length) list.append(h('div', { class: 'toc-secs' }, secs.map((s) => h('button', { class: 'toc-sec l' + s.level, onclick: () => { scrollToBlock(s.block, true); if (innerWidth < 1100) togglePanel(null); } }, s.title))));
     }
   });
-  R.tocPanel.replaceChildren(...[head, jump, list].filter(Boolean));
+  R.tocPanel.replaceChildren(...[head, jump, h('div', { class: 'toc-tools' }, splitBtn), list].filter(Boolean));
   requestAnimationFrame(() => list.querySelector('.cur')?.scrollIntoView({ block: 'center' }));
+}
+
+async function splitHere() {
+  const { doc, meta } = R;
+  const ch = doc.chapters[R.ci];
+  const bi = currentPos().bi;
+  if (bi <= ch.start) { toast('Przewiń do miejsca, od którego ma zaczynać się nowy rozdział', { icon: 'info' }); return; }
+  const b = doc.blocks[bi];
+  const t = await promptDialog({ title: 'Nowy rozdział od tego miejsca', label: 'Tytuł nowego rozdziału', value: b.t === 'h' ? b.x : '', ok: 'Utwórz' });
+  if (!t || !t.trim()) return;
+  const prog = meta.prog;
+  const far = prog.far[ch.start];
+  doc.chapters.splice(R.ci + 1, 0, { id: '', title: t.trim(), kw: '', num: '', start: bi, level: ch.level, part: ch.part, manual: true });
+  if (prog.done[ch.start]) prog.done[bi] = prog.done[ch.start];
+  if (far != null && far >= bi) prog.far[bi] = far;
+  doc.chapters.forEach((c, i) => { c.id = 'c' + i; });
+  doc.cw = buildWordIndex(doc);
+  await saveContent(doc);
+  meta.chapterCount = doc.chapters.length; meta.auto = false;
+  await saveMeta(meta);
+  if (R.panel === 'toc') buildToc();
+  toast('Podzielono rozdział', { icon: 'scissors' });
+  gotoChapter(R.ci + 1, bi);
 }
 
 function marksSorted(kind) {
@@ -959,14 +984,30 @@ function openAppearance() {
 // ───────────── czytanie na głos ─────────────
 function isSpeakable(i) {
   const b = R.doc.blocks[i];
-  return !!b && !!b.x && ['p', 'li', 'h', 'quote'].includes(b.t);
+  return !!b && !!b.x && !b.fn && ['p', 'li', 'h', 'quote'].includes(b.t);
+}
+
+// zapowiedź na początku akapitu: „Artykuł 5. Ustęp 2.”, „punkt 3”, „litera a”
+function spokenLabel(i) {
+  const b = R.doc.blocks[i];
+  if (!b) return '';
+  if (b.art || b.u) return [b.art ? `Artykuł ${b.art.replace('–', ' do ')}.` : '', b.u ? `Ustęp ${b.u.replace(/\.$/, '')}.` : ''].filter(Boolean).join(' ');
+  if (b.t === 'li' && b.o) {
+    const m = b.o.match(/^(\d+[a-z]{0,3})\)$/);
+    if (m) return `Punkt ${m[1]}.`;
+    const l = b.o.match(/^([a-z]{1,2})\)$/);
+    if (l) return `Litera ${l[1]}.`;
+  }
+  return '';
 }
 
 function ensureNarrator() {
   if (R.narrator) return R.narrator;
   const n = new Narrator({
-    isSpeakable, text: (i) => R.doc.blocks[i].x,
+    isSpeakable, text: (i) => R.doc.blocks[i].x, pre: spokenLabel,
     onBlock: (i) => {
+      if (R.sleepAt && Date.now() > R.sleepAt) { R.sleepAt = 0; setTimeout(() => { R.narrator?.stop(); toast('Minutnik: zatrzymano czytanie', { icon: 'headphones' }); }, 0); return; }
+      mediaMeta();
       R.root.querySelectorAll('.speaking').forEach((e) => e.classList.remove('speaking'));
       const el = R.idx2el.get(i);
       if (el) {
@@ -978,7 +1019,12 @@ function ensureNarrator() {
     },
     onSentence: (i, s, e) => highlightSentence(i, s, e),
     onState: (st) => { paintListen(st); },
-    onFinish: () => { toast('Koniec rozdziału', { icon: 'headphones', ms: 2000 }); R.root.querySelectorAll('.speaking').forEach((x) => x.classList.remove('speaking')); },
+    onError: () => toast('Syntezator mowy nie odpowiada. Sprawdź, czy w systemie jest zainstalowany polski głos (Ustawienia → Dostępność → Mowa).', { error: true, ms: 5000 }),
+    onFinish: () => {
+      R.root.querySelectorAll('.speaking').forEach((x) => x.classList.remove('speaking'));
+      if (settings.ttsNext && R.ci + 1 < R.doc.chapters.length && !(R.sleepAt && Date.now() > R.sleepAt)) { R.autoListen = true; toast('Następny rozdział…', { icon: 'headphones', ms: 1500 }); gotoChapter(R.ci + 1); return; }
+      toast('Koniec rozdziału', { icon: 'headphones', ms: 2000 });
+    },
   });
   R.narrator = n;
   loadVoices().then((v) => { R.voices = v; n.voice = pickVoice(v, settings.ttsVoice); });
@@ -1022,12 +1068,7 @@ function paintListen(st) {
   const n = R.narrator;
   const rates = [0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
   const rateBtn = h('button', { class: 'btn sm rate', onclick: () => { const k = rates.indexOf(n.rate); const nr = rates[(k + 1) % rates.length] ?? 1; n.setRate(nr); setSetting('ttsRate', nr); rateBtn.textContent = nr.toString().replace('.', ',') + '×'; } }, n.rate.toString().replace('.', ',') + '×');
-  const voiceBtn = h('button', { class: 'icon-btn sm', 'aria-label': 'Wybierz głos', title: 'Głos', html: ic('volume'), onclick: () => {
-    const pl = R.voices.filter((v) => v.lang.toLowerCase().startsWith('pl'));
-    const list = (pl.length ? pl : R.voices).slice(0, 14);
-    if (!list.length) { toast('Brak dostępnych głosów w tym urządzeniu', { error: true }); return; }
-    openMenu(voiceBtn, list.map((v) => ({ icon: n.voice === v ? 'check' : 'volume', label: `${v.name.replace(/Microsoft |Google /g, '')} (${v.lang})`, onClick: () => { n.setVoice(v); setSetting('ttsVoice', v.voiceURI); } })), { align: 'left' });
-  } });
+  const voiceBtn = h('button', { class: 'icon-btn sm', 'aria-label': 'Głos i ustawienia czytania', title: 'Głos i ustawienia', html: ic('volume'), onclick: () => openListenSettings(n) });
   bar.replaceChildren(h('div', { class: 'rl-in' },
     h('button', { class: 'icon-btn', 'aria-label': 'Poprzedni akapit', html: ic('skip-prev'), onclick: () => n.skip(-1) }),
     h('button', { class: 'rl-play', 'aria-label': st === 'playing' ? 'Pauza' : 'Wznów', html: ic(st === 'playing' ? 'pause-fill' : 'play-fill'), onclick: () => (st === 'playing' ? n.pause() : n.resume()) }),
@@ -1036,9 +1077,61 @@ function paintListen(st) {
     h('button', { class: 'icon-btn', 'aria-label': 'Zakończ czytanie', html: ic('close'), onclick: () => n.stop() })));
 }
 
+function openListenSettings(n) {
+  const voices = (R.voices || []).slice();
+  const isPl = (v) => v.lang.toLowerCase().startsWith('pl');
+  const rank = (v) => (isPl(v) ? 0 : 1) * 10 + (/natural|neural|premium|enhanced|google/i.test(v.name) ? 0 : 1);
+  voices.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
+  const body = h('div', { class: 'ls' });
+  const paint = () => {
+    const rows = [];
+    // tempo
+    const rate = h('input', { type: 'range', min: 0.7, max: 2.2, step: 0.05, value: n.rate, 'aria-label': 'Tempo czytania' });
+    const rv = h('b', {}, n.rate.toFixed(2).replace('.', ',') + '×');
+    rate.addEventListener('input', () => { rv.textContent = (+rate.value).toFixed(2).replace('.', ',') + '×'; });
+    rate.addEventListener('change', () => { n.setRate(+rate.value); setSetting('ttsRate', +rate.value); });
+    rows.push(h('div', { class: 'ls-row' }, h('span', {}, 'Tempo'), rv), rate);
+    // auto-następny
+    const sw = (key, label, hint) => h('label', { class: 'ls-sw' }, h('span', {}, label, hint ? h('small', {}, hint) : null),
+      h('input', { type: 'checkbox', checked: settings[key] ? true : null, onchange: (e) => setSetting(key, e.target.checked) }));
+    rows.push(sw('ttsNext', 'Czytaj kolejne rozdziały', 'po zakończeniu rozdziału przejdź do następnego'));
+    // minutnik
+    const timers = [['Wył.', 0], ['15 min', 15], ['30 min', 30], ['60 min', 60]];
+    const active = R.sleepAt ? Math.round((R.sleepAt - R.sleepSet) / 60000) : 0;
+    rows.push(h('div', { class: 'ls-row' }, h('span', {}, 'Minutnik snu')),
+      h('div', { class: 'seg ls-seg' }, timers.map(([l, m]) => h('button', { class: active === m ? 'on' : '', onclick: () => { R.sleepSet = Date.now(); R.sleepAt = m ? Date.now() + m * 60000 : 0; if (m) toast(`Czytanie zatrzyma się za ${m} min`, { icon: 'moon' }); paint(); } }, l))));
+    // głosy
+    rows.push(h('div', { class: 'ls-row' }, h('span', {}, 'Głos')));
+    if (!voices.length) rows.push(h('p', { class: 'muted' }, 'Brak głosów w tym urządzeniu. Zainstaluj polski głos w ustawieniach systemu (Dostępność → Mowa).'));
+    else if (!voices.some(isPl)) rows.push(h('p', { class: 'muted ls-warn' }, 'Nie znalazłem polskiego głosu. Dodaj go w ustawieniach systemu — tekst polski czytany głosem obcym brzmi źle.'));
+    const vl = h('div', { class: 'ls-voices' });
+    voices.slice(0, 40).forEach((v) => vl.append(h('button', { class: 'ls-v' + (n.voice === v ? ' on' : ''), onclick: () => { n.setVoice(v); setSetting('ttsVoice', v.voiceURI); paint(); } },
+      h('span', { class: 'ls-vn' }, v.name.replace(/Microsoft /, '')), h('small', {}, v.lang + (v.localService ? '' : ' · online')), n.voice === v ? h('i', { html: ic('check') }) : null)));
+    rows.push(vl);
+    body.replaceChildren(...rows);
+  };
+  paint();
+  openSheet({ title: 'Czytanie na głos', body });
+}
+
+// sterowanie z ekranu blokady / słuchawek
+function mediaMeta() {
+  if (!('mediaSession' in navigator) || !R) return;
+  try {
+    const ch = R.doc.chapters[R.ci];
+    navigator.mediaSession.metadata = new MediaMetadata({ title: ch?.title || R.meta.title, artist: R.meta.title, album: 'Lumen' });
+    const n = R.narrator;
+    navigator.mediaSession.setActionHandler('play', () => n.resume());
+    navigator.mediaSession.setActionHandler('pause', () => n.pause());
+    navigator.mediaSession.setActionHandler('nexttrack', () => n.skip(1));
+    navigator.mediaSession.setActionHandler('previoustrack', () => n.skip(-1));
+    navigator.mediaSession.setActionHandler('stop', () => n.stop());
+  } catch { /* brak */ }
+}
+
 function toggleListen() {
   if (!ttsSupported) { toast('Ta przeglądarka nie obsługuje czytania na głos', { error: true }); return; }
-  if (R.scanned) { toast('Czytanie na głos nie działa dla skanów bez tekstu', { error: true }); return; }
+  if (R.scanned) { toast('To skan — najpierw rozpoznaj tekst (OCR) na stronie dokumentu, wtedy zadziała czytanie na głos', { error: true, ms: 4500 }); return; }
   const n = ensureNarrator();
   if (n.state === 'idle') n.start(R.pos.bi, R.endBlock);
   else if (n.state === 'playing') n.pause();

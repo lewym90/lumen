@@ -65,6 +65,7 @@ function splitMargin(lines, W) {
 }
 
 export function parseLegal(pages) {
+  const ocr = !!pages.ocr;
   // ── wielkości globalne: tekst podstawowy, lewy margines ──
   const sizeW = new Map(), xW = new Map();
   const hy = new Set();
@@ -206,7 +207,7 @@ export function parseLegal(pages) {
         while (j < lines.length && ttl.length < 3) {
           const n = lines[j];
           const nt = joinRuns(lineRuns(n)).replace(/\s+/g, ' ').trim();
-          if (n.segs.every((s) => s.isBold) && n.size >= body - 0.6 && !HEAD_RE.test(nt) && !ART_RE.test(nt)) { ttl.push(nt); j++; } else break;
+          if ((ocr ? (n.x0 > left + 25 && !/[;,:]$/.test(nt) && nt.length < 140 && !/^\d+[.)]/.test(nt)) : (n.segs.every((s) => s.isBold) && n.size >= body - 0.6)) && !HEAD_RE.test(nt) && !ART_RE.test(nt)) { ttl.push(nt); j++; } else break;
         }
         i = j - 1;
         const txt = [`${cap(hm[1])} ${hm[2]}`, ttl.join(' ')].filter(Boolean).join(' ');

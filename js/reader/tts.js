@@ -13,7 +13,64 @@ export function sentences(text) {
     let m;
     while ((m = re.exec(text))) out.push({ s: m.index, e: m.index + m[0].length, t: m[0] });
   }
-  return out.filter((x) => x.t.trim().length);
+  const clean = out.filter((x) => x.t.trim().length);
+  // zdania nie kończą się na skrótach (art., ust., pkt, Dz. U. …) ani na liczbach porządkowych
+  const ABBR_ALWAYS = /(?:\b(?:art|ust|pkt|poz|lit|nr|zm|tzw|np|ok|godz|ul|al|im|dz|prof|dr|mgr|inż|św|woj|str|rozdz|zał|tj|ww|ob|par|cz|pl)|\bDz\.\s*U|\bm\.in|\bt\.j|\bz późn\. zm)\.\s*$/i;
+  const ABBR_SOFT = /\b(?:r|w|zł|tys|mln|mld|ha|km|kg|ur|s|t)\.\s*$/i;
+  const merged = [];
+  for (const x of clean) {
+    const prev = merged[merged.length - 1];
+    if (prev) {
+      const nextCh = x.t.trim()[0] || '';
+      const soft = /[a-ząćęłńóśźż0-9(]/.test(nextCh);
+      if (ABBR_ALWAYS.test(prev.t) || (soft && ABBR_SOFT.test(prev.t)) || (/\d\.\s*$/.test(prev.t) && /^[a-ząćęłńóśźż]/.test(nextCh))) {
+        prev.t += x.t; prev.e = x.e; continue;
+      }
+    }
+    merged.push({ ...x });
+  }
+  return merged;
+}
+
+// Rozwijanie skrótów na potrzeby syntezatora (tylko dla polskiego). Podświetlany jest oryginalny tekst.
+const EXPAND = [
+  [/\bart\.\s*/gi, 'artykuł '], [/\bust\.\s*/gi, 'ustęp '], [/\bpkt\.?\s*/gi, 'punkt '], [/\blit\.\s*/gi, 'litera '],
+  [/\bpoz\.\s*/gi, 'pozycja '], [/\bDz\.\s*U\.\s*/g, 'Dziennik Ustaw '], [/\bnr\s*(?=\d)/gi, 'numer '],
+  [/\bz późn\.\s*zm\./gi, 'z późniejszymi zmianami'], [/\bt\.\s*j\./gi, 'tekst jednolity'], [/\bm\.in\./gi, 'między innymi'],
+  [/\bnp\./gi, 'na przykład'], [/\btzw\./gi, 'tak zwany'], [/\btzn\./gi, 'to znaczy'], [/\bitd\./gi, 'i tak dalej'],
+  [/\bitp\./gi, 'i tym podobne'], [/\bww\./gi, 'wyżej wymienionych'], [/\bok\.\s*(?=\d)/gi, 'około '], [/\brozdz\.\s*/gi, 'rozdział '],
+  [/\bgodz\.\s*/gi, 'godzina '], [/§\s*/g, 'paragraf '], [/\bul\.\s*/g, 'ulica '], [/\bal\.\s*(?=[A-ZŁŚŻ])/g, 'aleja '],
+  [/(\d)\s*r\.(?=\s|$|[,;)])/g, '$1 roku'], [/(\d)\s*zł(?![A-Za-ząćęłńóśźż])/g, '$1 złotych'], [/(\d)\s*%/g, '$1 procent'],
+  [/(\d)\s*(?:m2|m²)/g, '$1 metrów kwadratowych'], [/\bmln\b\.?/gi, 'milionów'], [/\btys\./gi, 'tysięcy'],
+  [/(\d+[a-z]?)\s*[–—]\s*(\d+)/g, 'od $1 do $2'],
+  [/\s*\((?:uchylony|pominięty|pominięte)\)/gi, ' uchylony'],
+];
+export function expandSpeech(t, lang = 'pl') {
+  if (!lang.toLowerCase().startsWith('pl')) return t;
+  let r = t;
+  for (const [re, to] of EXPAND) r = r.replace(re, to);
+  return r.replace(/\s{2,}/g, ' ').trim();
+}
+
+// Chrome przerywa zbyt długie wypowiedzi — tnij je na kawałki przy znakach interpunkcyjnych
+function chunkSpeech(t, max = 220) {
+  if (t.length <= max) return [t];
+  const out = [];
+  let rest = t;
+  while (rest.length > max) {
+    let cut = -1;
+    for (const re of [/[;:]\s/g, /,\s/g, /\s/g]) {
+      let m, last = -1;
+      re.lastIndex = 0;
+      while ((m = re.exec(rest)) && m.index < max) last = m.index + m[0].length;
+      if (last > max * 0.4) { cut = last; break; }
+    }
+    if (cut < 0) cut = max;
+    out.push(rest.slice(0, cut).trim());
+    rest = rest.slice(cut);
+  }
+  if (rest.trim()) out.push(rest.trim());
+  return out;
 }
 
 export function loadVoices() {
@@ -44,6 +101,7 @@ export class Narrator {
     this.si = 0;
     this.end = 0;
     this.token = 0;
+    this.errs = 0;
   }
 
   setRate(r) { this.rate = r; if (this.state === 'playing') this._restartSentence(); }
@@ -66,6 +124,8 @@ export class Narrator {
     if (i >= this.end) { this._finish(); return; }
     this.cur = i;
     this.sents = sentences(this.host.text(i));
+    const pre = this.host.pre ? this.host.pre(i) : '';
+    if (pre) this.sents.unshift({ s: 0, e: 0, t: pre, pre: true });
     this.si = 0;
     this.host.onBlock(i);
     this._speakSentence();
@@ -75,14 +135,27 @@ export class Narrator {
     if (this.state !== 'playing') return;
     if (this.si >= this.sents.length) { this._enterBlock(this._nextSpeakable(this.cur + 1)); return; }
     const sn = this.sents[this.si];
-    const u = new SpeechSynthesisUtterance(sn.t.trim());
-    if (this.voice) { u.voice = this.voice; u.lang = this.voice.lang; } else u.lang = 'pl-PL';
-    u.rate = this.rate;
+    const lang = (this.voice && this.voice.lang) || 'pl-PL';
+    const chunks = chunkSpeech(expandSpeech(sn.t.trim(), lang));
     const tk = this.token;
-    this.host.onSentence(this.cur, sn.s, sn.e);
-    u.onend = () => { if (tk !== this.token || this.state !== 'playing') return; this.si++; this._speakSentence(); };
-    u.onerror = (e) => { if (tk !== this.token) return; if (e.error === 'canceled' || e.error === 'interrupted') return; this.si++; this._speakSentence(); };
-    synth.speak(u);
+    if (sn.pre) this.host.onSentence(-1, 0, 0); else this.host.onSentence(this.cur, sn.s, sn.e);
+    const next = () => { if (tk !== this.token || this.state !== 'playing') return; this.si++; this._speakSentence(); };
+    const speak = (k) => {
+      if (k >= chunks.length) { next(); return; }
+      const u = new SpeechSynthesisUtterance(chunks[k]);
+      if (this.voice) { u.voice = this.voice; u.lang = this.voice.lang; } else u.lang = 'pl-PL';
+      u.rate = this.rate;
+      u.onend = () => { if (tk !== this.token || this.state !== 'playing') return; this.errs = 0; speak(k + 1); };
+      u.onerror = (e) => {
+        if (tk !== this.token) return;
+        if (e.error === 'canceled' || e.error === 'interrupted') return;
+        // syntezator nie działa (brak głosu, brak zgody) — nie przewijaj całego rozdziału w ciszy
+        if (++this.errs >= 2) { this.stop(); this.host.onError && this.host.onError(e.error); return; }
+        speak(k + 1);
+      };
+      synth.speak(u);
+    };
+    speak(0);
   }
 
   _restartSentence() {

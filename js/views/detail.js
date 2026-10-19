@@ -2,9 +2,11 @@
 import { h, ic, plural, fmtMinutes, fmtNum, fmtDate, addDays, dayKey } from '../util.js';
 import { getMeta, loadDoc, saveMeta, saveContent, docProgress, continueTarget, chapterInfo, stats, settings, bus, wordsToMinutes } from '../state.js';
 import { sectionsOf, chapterEnd, buildWordIndex } from '../import/structure.js';
-import { coverEl, ring, progressBar, openMenu, toast, confirmDialog, promptDialog, typeLabel, attachTilt, countUp } from '../ui.js';
+import { coverEl, ring, progressBar, openMenu, openSheet, toast, confirmDialog, promptDialog, typeLabel, attachTilt, countUp } from '../ui.js';
 import { chapterKicker, partLabel, minutesFor, pageRange, planFor, finishEstimate } from '../course.js';
 import { openDoc, renameDoc, deleteDoc } from './shared.js';
+import { pickBlock } from './blockpicker.js';
+import { parseLabel } from '../import/structure.js';
 
 export async function mount(root, { id }) {
   const meta = getMeta(id);
@@ -47,6 +49,30 @@ export async function mount(root, { id }) {
     render();
   }
 
+  async function splitPick(ci) {
+    const end = chapterEnd(doc, ci);
+    const bi = await pickBlock(doc, doc.chapters[ci].start + 1, end, { title: 'Gdzie zacząć nowy rozdział?', hint: 'Wybierz akapit, od którego ma się zaczynać nowy rozdział.' });
+    if (bi != null) await splitAt(bi, ci);
+  }
+
+  async function moveStart(ci) {
+    const ch = doc.chapters[ci];
+    const lo = ci > 0 ? doc.chapters[ci - 1].start + 1 : 0;
+    const hi = Math.min(chapterEnd(doc, ci), ch.start + 400);
+    const bi = await pickBlock(doc, lo, hi, { title: 'Nowy początek rozdziału', hint: 'Wybierz miejsce, od którego rozdział ma się zaczynać. Poprzedni rozdział zostanie odpowiednio skrócony lub wydłużony.', cur: ch.start });
+    if (bi == null || bi === ch.start) return;
+    const prog = meta.prog;
+    const f = prog.far[ch.start], d = prog.done[ch.start];
+    delete prog.far[ch.start]; delete prog.done[ch.start];
+    ch.start = bi;
+    if (f != null && f >= bi) prog.far[bi] = f;
+    if (d) prog.done[bi] = d;
+    renumber();
+    await persistStructure();
+    toast('Przesunięto początek rozdziału', { icon: 'scissors' });
+    render();
+  }
+
   async function mergeWithPrev(ci) {
     if (ci <= 0) return;
     const prev = doc.chapters[ci - 1], cur = doc.chapters[ci];
@@ -65,7 +91,10 @@ export async function mount(root, { id }) {
   async function renameCh(ci) {
     const t = await promptDialog({ title: 'Zmień nazwę rozdziału', value: doc.chapters[ci].title, label: 'Tytuł' });
     if (!t || !t.trim()) return;
-    doc.chapters[ci].title = t.trim();
+    const lab = parseLabel(t);
+    const c = doc.chapters[ci];
+    if (lab.kw && lab.num) { c.kw = lab.kw; c.num = lab.num; c.title = lab.title || t.trim(); }
+    else { c.title = t.trim(); }
     await persistStructure();
     render();
   }
@@ -79,6 +108,33 @@ export async function mount(root, { id }) {
     meta.pct = p.pct;
     await saveMeta(meta);
     render();
+  }
+
+  async function startOcr() {
+    const { ocrDocument, ocrSupported } = await import('../import/ocr.js');
+    if (!ocrSupported()) { toast('Ta przeglądarka nie obsługuje rozpoznawania tekstu', { error: true }); return; }
+    const ctl = new AbortController();
+    const bar = progressBar(0);
+    const ph = h('div', { class: 'ocr-ph' }, 'Przygotowuję…');
+    const dt = h('div', { class: 'dim ocr-dt' }, '');
+    const cancel = h('button', { class: 'btn', onclick: () => { ctl.abort(); cancel.disabled = true; ph.textContent = 'Przerywam… (postęp zostanie zapamiętany)'; } }, 'Przerwij');
+    const body = h('div', { class: 'ocr-body' },
+      h('p', { class: 'muted', style: { margin: '0 0 16px', lineHeight: 1.5 } }, 'Czytam strony skanu i zamieniam je na tekst. Pierwsze uruchomienie pobiera silnik (~12 MB), potem działa offline. Zostaw tę kartę otwartą — duże dokumenty mogą potrwać kilkanaście minut.'),
+      ph, bar, dt, h('div', { style: { display: 'flex', justifyContent: 'flex-end', marginTop: '18px' } }, cancel));
+    const sheet = openSheet({ title: 'Rozpoznawanie tekstu', body });
+    const setBar = (f) => { const i = bar.querySelector('i'); if (i) i.style.width = Math.round(f * 100) + '%'; };
+    try {
+      const words = await ocrDocument(meta, { signal: ctl.signal, onProgress: (p) => { ph.textContent = p.phase || ''; dt.textContent = p.detail || ''; setBar(p.frac || 0); } });
+      sheet.close();
+      const nd = await loadDoc(id);
+      doc.blocks = nd.blocks; doc.chapters = nd.chapters; doc.auto = nd.auto; doc.cw = nd.cw;
+      toast(`Gotowe — rozpoznano ${fmtNum(words)} słów`, { icon: 'check-circle' });
+      render();
+    } catch (e) {
+      sheet.close();
+      if (e.aborted) toast('Przerwano — kolejne uruchomienie dokończy od tego miejsca');
+      else toast(e.message || 'Nie udało się rozpoznać tekstu', { error: true });
+    }
   }
 
   async function resetStructure() {
@@ -104,16 +160,19 @@ export async function mount(root, { id }) {
     const kick = chapterKicker(c);
     const ind = h('div', { class: 'ch-ind' });
     if (state === 'done') ind.innerHTML = ic('check');
-    else if (state === 'prog') ind.append(ring({ size: 38, stroke: 4, pct: info.pct, inner: h('span', { class: 'ch-n' }, c.num || (c.front ? '·' : ci + 1)) }));
-    else ind.append(h('span', { class: 'ch-n' }, c.num || (c.front ? '·' : ci + 1)));
+    else if (state === 'prog') ind.append(ring({ size: 38, stroke: 4, pct: info.pct, inner: h('span', { class: 'ch-n' }, c.num || (c.front || c.manual ? '·' : ci + 1)) }));
+    else ind.append(h('span', { class: 'ch-n' }, c.num || (c.front || c.manual ? '·' : ci + 1)));
     const more = h('button', { class: 'icon-btn ch-more', 'aria-label': 'Opcje rozdziału', html: ic('dots'), onclick: (e) => {
       e.stopPropagation();
       openMenu(more, [
         { icon: 'play', label: info.started && !info.done ? 'Kontynuuj ten rozdział' : 'Czytaj ten rozdział', onClick: () => toRead(ci) },
         { icon: info.done ? 'circle' : 'check-circle', label: info.done ? 'Oznacz jako nieprzeczytany' : 'Oznacz jako przeczytany', onClick: () => toggleDone(ci) },
         'hr',
-        { icon: 'edit', label: 'Zmień nazwę', onClick: () => renameCh(ci) },
-        ...(ci > 0 ? [{ icon: 'merge', label: 'Scal z poprzednim', onClick: () => mergeWithPrev(ci) }] : []),
+        { icon: 'edit', label: 'Zmień nazwę lub numer', onClick: () => renameCh(ci) },
+        { icon: 'scissors', label: 'Podziel w wybranym miejscu…', onClick: () => splitPick(ci) },
+        ...(ci > 0 ? [{ icon: 'merge', label: 'Scal z poprzednim', onClick: () => mergeWithPrev(ci) }, { icon: 'down', label: 'Przesuń początek rozdziału…', onClick: () => moveStart(ci) }] : []),
+        ...(ci + 1 < doc.chapters.length ? [{ icon: 'merge', label: 'Scal z następnym', onClick: () => mergeWithPrev(ci + 1) }] : []),
+        ...(doc.auto ? ['hr', { icon: 'refresh', label: 'Przywróć podział automatyczny', onClick: resetStructure }] : []),
       ]);
     } });
     const row = h('div', { class: `ch-row state-${state}` + (open ? ' open' : ''), style: { '--i': Math.min(ci, 20) } },
@@ -203,8 +262,8 @@ export async function mount(root, { id }) {
     });
 
     const notice = [];
-    if (meta.scanned) notice.push(h('div', { class: 'notice' }, h('span', { html: ic('info') }), 'To skan bez warstwy tekstowej — czytasz strony jako obrazy. Wyszukiwanie i czytanie na głos nie są dostępne.'));
-    if (editing) notice.push(h('div', { class: 'notice acc' }, h('span', { html: ic('scissors') }), 'Tryb poprawiania podziału: rozwiń rozdział strzałką i wybierz „Nowy rozdział” przy nagłówku, od którego ma się zaczynać. Scalanie jest w menu rozdziału (⋯).', h('button', { class: 'btn sm', onclick: () => { editing = false; render(true); } }, 'Gotowe')));
+    if (meta.scanned) notice.push(h('div', { class: 'notice acc' }, h('span', { html: ic('info') }), 'To skan bez warstwy tekstowej — strony są obrazami. Rozpoznanie tekstu (OCR) zamieni je na zwykły tekst z rozdziałami, zakreślaniem, szukaniem i czytaniem na głos. Działa na Twoim urządzeniu, offline.', h('button', { class: 'btn sm primary', onclick: startOcr }, 'Rozpoznaj tekst')));
+    if (editing) notice.push(h('div', { class: 'notice acc' }, h('span', { html: ic('scissors') }), 'Poprawianie podziału: w menu rozdziału (⋯) zmienisz nazwę, podzielisz go w dowolnym miejscu, przesuniesz początek albo scalisz z sąsiednim. Rozwiń rozdział strzałką, by utworzyć nowy od nagłówka.', h('button', { class: 'btn sm', onclick: () => { editing = false; render(true); } }, 'Gotowe')));
 
     page.replaceChildren(
       h('div', { class: 'detail-top' }, back, menuBtn),
