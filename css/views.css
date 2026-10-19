@@ -185,6 +185,15 @@ input[type="range"]::-moz-range-thumb { width: 22px; height: 22px; border-radius
 
 .ch-list { display: grid; gap: 10px; }
 .part-h { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 22px 4px 4px; font-size: 12px; letter-spacing: .15em; text-transform: uppercase; font-weight: 700; color: var(--accent); }
+.part-h .ph-t { display: grid; gap: 2px; min-width: 0; }
+.part-h .ph-t b { font-weight: 700; }
+.part-h .ph-t em { font-style: normal; font-weight: 600; font-size: 12.5px; letter-spacing: .02em; text-transform: none; color: var(--text-2); line-height: 1.35; }
+@media (max-width: 560px) {
+  .stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .stat { grid-template-columns: 1fr; grid-template-rows: auto auto; padding: 10px 12px; justify-items: start; }
+  .stat-ic { display: none; }
+  .stat b { font-size: 17px; }
+}
 .part-h.plain { margin: 6px 0 0; }
 .part-h small { color: var(--text-3); letter-spacing: .05em; }
 .part-h:first-child { margin-top: 0; }

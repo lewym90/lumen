@@ -124,21 +124,22 @@ export function buildChapters(blocks, entries, docTitle = '') {
   const byLevel = new Map();
   list.forEach((e) => byLevel.set(e.level, (byLevel.get(e.level) || 0) + 1));
   const levels = [...byLevel.keys()].sort((a, b) => a - b);
-  let L = levels.find((l) => byLevel.get(l) >= 3);
+  const explicit = list.some((e) => e.legal);
+  let L = explicit ? Math.max(...levels) : levels.find((l) => byLevel.get(l) >= 3);
   if (L == null) L = levels.slice().sort((a, b) => byLevel.get(b) - byLevel.get(a))[0];
 
   const chapters = [];
   let pendingPart = '', pendingPartStart = null;
   for (const e of list) {
     const partLike = isPartTitle(e.title);
-    if (e.level < L || (e.level === L && partLike && list.some((x) => x !== e && x.level === L && !isPartTitle(x.title)))) {
+    if (e.level < L || (!explicit && e.level === L && partLike && list.some((x) => x !== e && x.level === L && !isPartTitle(x.title)))) {
       const lab = parseLabel(e.title);
       pendingPart = [lab.kw && lab.num ? `${lab.kw} ${lab.num}` : '', lab.title].filter(Boolean).join('|') || e.title;
       pendingPartStart = e.block;
       continue;
     }
     if (e.level > L) continue;
-    const c = mkChapter({ ...e, part: pendingPart }, chapters.length);
+    const c = mkChapter({ ...e, part: e.solo ? '' : pendingPart }, chapters.length);
     if (pendingPartStart != null && pendingPartStart <= c.start) {
       const between = chapters.length && chapters[chapters.length - 1].start >= pendingPartStart;
       if (!between) c.start = Math.min(c.start, pendingPartStart);

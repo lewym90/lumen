@@ -196,7 +196,7 @@ export async function mount(root, { id }) {
         if (part) {
           const members = infos.filter((y) => (y.c.part || '') === part);
           const done = members.filter((y) => y.done).length;
-          list.append(h('div', { class: 'part-h' }, h('span', {}, partLabel(x.c)), h('small', {}, `${done}/${members.length}`)));
+          list.append(h('div', { class: 'part-h' }, h('span', { class: 'ph-t' }, h('b', {}, x.c.part.split('|')[0]), x.c.part.includes('|') ? h('em', {}, x.c.part.split('|').slice(1).join(' ')) : null), h('small', {}, `${done}/${members.length}`)));
         } else if (i > 0) list.append(h('div', { class: 'part-h plain' }));
       }
       list.append(chapterRow(x, i));

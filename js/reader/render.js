@@ -58,10 +58,11 @@ export function blockHtml(b, i, ctx) {
     case 'h': {
       const l = Math.min(4, Math.max(1, b.l || 2));
       const tag = l <= 2 ? 'h2' : l === 3 ? 'h3' : 'h4';
+      if (b.hk && b.ht && !hls && !hits) return `<${tag} class="hd lg-h l${l}${bm}" data-b="${i}" data-t><span class="lg-hk">${esc(b.hn)}</span><span class="lg-ht">${esc(b.ht)}</span></${tag}>`;
       return `<${tag} class="hd l${l}${bm}" data-b="${i}" data-t>${txt()}</${tag}>`;
     }
     case 'li':
-      return `<div class="li${b.d ? ' d' + b.d : ''}${bm}" data-b="${i}"><span class="bul" aria-hidden="true">${esc(b.o || '•')}</span><span class="lt" data-t>${txt()}</span></div>`;
+      return `<div class="li${b.d ? ' d' + b.d : ''}${(b.o || '').length > 2 ? ' wide' : ''}${/\)$/.test(b.o || '') ? ' pk' : ''}${bm}" data-b="${i}"><span class="bul" aria-hidden="true">${esc(b.o || '•')}</span><span class="lt" data-t>${txt()}</span></div>`;
     case 'quote':
       return `<blockquote class="${bm.trim()}" data-b="${i}" data-t>${txt()}</blockquote>`;
     case 'code':
@@ -77,7 +78,11 @@ export function blockHtml(b, i, ctx) {
     case 'page':
       return `<div class="pgimg" data-b="${i}" data-pg="${b.pg}"><canvas></canvas><span class="pgn">${b.pg}</span></div>`;
     default: {
-      const cls = [b.ld ? 'ld' : '', b.sm ? 'sm' : '', b.cap ? 'cap' : '', bm.trim()].filter(Boolean).join(' ');
+      if (b.art || b.u) {
+        const lab = `${b.art ? `<b class="lg-an">Art.&nbsp;${esc(b.art)}.</b>` : ''}${b.u ? `<span class="lg-u">${esc(b.u)}</span>` : ''}`;
+        return `<p class="lg-p${b.art ? ' lg-art' : ''}${bm}" data-b="${i}"><span class="lg-lab" aria-hidden="true">${lab}</span><span data-t>${txt()}</span></p>`;
+      }
+      const cls = [b.ctr ? 'ctr' + (b.ttl ? ' ttl-' + b.ttl : '') : '', b.wc ? 'wc' : '', b.fn ? 'fn' : '', b.note ? 'note' : '', b.ld ? 'ld' : '', b.sm ? 'sm' : '', b.cap ? 'cap' : '', bm.trim()].filter(Boolean).join(' ');
       const btn = b.cap && ctx.hasPdf && b.pg ? `<button class="cap-btn" data-act="page" data-pg="${b.pg}" aria-label="Zobacz oryginalną stronę ${b.pg}" title="Zobacz oryginał, str. ${b.pg}">${ic('eye')}</button>` : '';
       return `<p class="${cls}" data-b="${i}" data-t>${txt()}</p>${btn}`;
     }
@@ -122,13 +127,14 @@ export function chapterBodyHtml(doc, ci, ctx) {
 
 export function openerHtml(doc, ci, info) {
   const ch = doc.chapters[ci];
-  const secs = sectionsOf(doc, ci).filter((s) => s.level === 1);
+  const nk = (t) => String(t).toLowerCase().replace(/[^a-ząćęłńóśźż0-9]+/g, '');
+  const secs = sectionsOf(doc, ci).filter((s) => s.level === 1).filter((s) => !(s.block < ch.start + 12 && nk(s.title).includes(nk(ch.title))));
   const kick = chapterKicker(ch);
   const part = partLabel(ch);
   const mins = minutesFor(info.words);
   const pr = pageRange(doc, ci);
   return `<header class="opener">
-    ${part ? `<div class="op-part">${esc(part)}</div>` : ''}
+    ${part ? (() => { const [pa, pb] = ch.part.split('|'); return pb && pb.length > 28 ? `<div class="op-part long"><b>${esc(pa)}</b><span>${esc(pb)}</span></div>` : `<div class="op-part">${esc(part)}</div>`; })() : ''}
     <div class="op-main">
       ${ch.num ? `<div class="op-num" aria-hidden="true">${esc(ch.num)}</div>` : `<div class="op-num glyph" aria-hidden="true">${ic('book-open')}</div>`}
       <div class="op-txt">

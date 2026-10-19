@@ -2,6 +2,7 @@
 // Nie zakłada niczego o konkretnym dokumencie: używa statystyk samego pliku.
 import { openPdf } from './pdfjs.js';
 import { TextBuilder, cleanStr } from './textbuild.js';
+import { detectLegal, parseLegal } from './legal.js';
 import { normKey, yieldUI } from '../util.js';
 
 const BOLD_RE = /bold|black|heavy|semibold|demi|extrabold|[-_,]bd\b/i;
@@ -782,6 +783,14 @@ export async function parsePdf(file, onProgress = () => {}) {
     for (let p = 1; p <= n; p++) blocks.push({ t: 'page', pg: p, x: '', w: 220 });
     const entries = await resolveOutlineScanned(pdf, n);
     return { meta, blocks, entries, scanned: true };
+  }
+
+  if (detectLegal(pages)) {
+    const lg = parseLegal(pages);
+    if (lg.blocks.length > 20) {
+      onProgress({ page: n, pages: n, frac: 1, phase: 'Gotowe' });
+      return { meta: { ...meta, title: lg.meta.title || meta.title, author: lg.meta.author || meta.author }, blocks: lg.blocks, entries: lg.entries, scanned: false, pdf, legal: true };
+    }
   }
 
   const ctx = analyze(pages);

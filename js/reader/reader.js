@@ -262,7 +262,7 @@ function finSub(p) {
 function updateTitle() {
   const { doc, ci } = R;
   const ch = doc.chapters[ci];
-  R.titleKick.textContent = [chapterKicker(ch), partLabel(ch)].filter(Boolean).join(' · ') || `${ci + 1} z ${doc.chapters.length}`;
+  R.titleKick.textContent = [chapterKicker(ch), (ch.part || '').split('|')[0]].filter(Boolean).join(' · ') || `${ci + 1} z ${doc.chapters.length}`;
   R.titleMain.textContent = ch.title;
   document.title = `${ch.title} · ${R.meta.title}`;
 }
@@ -593,10 +593,24 @@ function buildToc() {
     h('div', { class: 'pn-ht' }, h('b', {}, meta.title), h('small', {}, `${p.done} z ${doc.chapters.length} rozdziałów`)),
     h('button', { class: 'icon-btn', 'aria-label': 'Zamknij', html: ic('close'), onclick: () => togglePanel(null) }));
   const list = h('div', { class: 'toc-list' });
+  let jump = null;
+  if (doc.blocks.some((b) => b.art)) {
+    const input = h('input', { type: 'text', inputmode: 'text', autocomplete: 'off', placeholder: 'np. 28a', 'aria-label': 'Numer artykułu' });
+    jump = h('form', { class: 'art-jump', onsubmit: (e) => {
+      e.preventDefault();
+      const v = input.value.trim().toLowerCase().replace(/^art\.?\s*/, '').replace(/\.$/, '');
+      const num = parseInt(v, 10);
+      let bi = doc.blocks.findIndex((b) => b.art && (b.art.toLowerCase() === v || b.art.split('–')[0].toLowerCase() === v));
+      if (bi < 0 && /^\d+$/.test(v)) bi = doc.blocks.findIndex((b) => { if (!b.art || !b.art.includes('–')) return false; const [a, z] = b.art.split('–').map((x) => parseInt(x, 10)); return num >= a && num <= z; });
+      if (bi < 0) { input.classList.add('bad'); setTimeout(() => input.classList.remove('bad'), 700); return; }
+      if (innerWidth < 1100) togglePanel(null);
+      location.hash = `#/read/${meta.id}?b=${bi}`;
+    } }, h('span', {}, 'Art.'), input, h('button', { class: 'btn sm', type: 'submit' }, 'Idź'));
+  }
   let lastPart = null;
   infos.forEach((x, i) => {
     const part = x.c.part || '';
-    if (part !== lastPart) { lastPart = part; if (part) list.append(h('div', { class: 'toc-part' }, partLabel(x.c))); }
+    if (part !== lastPart) { lastPart = part; if (part) { const [pa, pb] = part.split('|'); list.append(h('div', { class: 'toc-part' }, pa, pb ? h('em', {}, pb) : null)); } }
     const state = x.done ? 'done' : x.started ? 'prog' : 'todo';
     const cur = i === ci;
     const row = h('button', { class: `toc-row state-${state}` + (cur ? ' cur' : ''), onclick: () => { gotoChapter(i); if (innerWidth < 1100) togglePanel(null); } },
@@ -608,7 +622,7 @@ function buildToc() {
       if (secs.length) list.append(h('div', { class: 'toc-secs' }, secs.map((s) => h('button', { class: 'toc-sec l' + s.level, onclick: () => { scrollToBlock(s.block, true); if (innerWidth < 1100) togglePanel(null); } }, s.title))));
     }
   });
-  R.tocPanel.replaceChildren(head, list);
+  R.tocPanel.replaceChildren(...[head, jump, list].filter(Boolean));
   requestAnimationFrame(() => list.querySelector('.cur')?.scrollIntoView({ block: 'center' }));
 }
 
