@@ -69,5 +69,10 @@ export async function startOver(meta, go) {
     text: 'Otworzę dokument na pierwszym rozdziale. Zakreślenia, notatki i oznaczone jako przeczytane rozdziały zostaną, ale miejsce, w którym skończyłeś, przesunie się na początek.',
     ok: 'Zacznij od początku',
   });
-  if (ok) go();
+  if (!ok) return;
+  const p = meta.prog || (meta.prog = { ch: 0, blk: 0, frac: 0, far: {}, done: {}, sec: 0, words: 0 });
+  p.ch = 0; p.blk = null; p.frac = 0; p.far = {}; p.t = Date.now();
+  try { localStorage.removeItem('lumen.pos.' + meta.id); } catch { /* brak */ }
+  await saveMeta(meta);
+  go();
 }
