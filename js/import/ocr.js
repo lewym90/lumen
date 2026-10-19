@@ -150,6 +150,7 @@ export async function ocrDocument(meta, { onProgress = () => {}, signal } = {}) 
   try { for (const m of await db.byDoc(meta.id)) await db.del('marks', m.id); } catch { /* brak */ }
   meta.scanned = false;
   meta.ocr = true;
+  meta.legal = !!res.legal;
   meta.words = cw[blocks.length];
   meta.chapterCount = chapters.length;
   meta.pct = 0;

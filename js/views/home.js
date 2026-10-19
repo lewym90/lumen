@@ -4,7 +4,7 @@ import { listDocs, loadDoc, stats, settings, streak, todaySeconds, lastDays, bus
 import { coverEl, ring, progressBar, attachTilt, countUp } from '../ui.js';
 import { chapterKicker, partLabel, minutesFor, planFor } from '../course.js';
 import { docCard, openDoc, openPlan } from './shared.js';
-import { pickFiles } from '../main.js';
+import { pickFiles, openAdd } from '../main.js';
 
 const WEEKDAYS = ['nd', 'pn', 'wt', 'śr', 'cz', 'pt', 'sb'];
 
@@ -22,7 +22,7 @@ function emptyState() {
       h('p', { class: 'muted lead' }, 'Książka, raport, skrypt, podręcznik, notatki. Lumen podzieli go na rozdziały, zapamięta miejsce, w którym skończyłeś, i pomoże Ci dotrzeć do końca.'),
       h('div', { class: 'he-actions' },
         h('button', { class: 'btn primary lg', onclick: () => pickFiles() }, h('span', { html: ic('upload') }), 'Wybierz plik'),
-        h('span', { class: 'dim he-hint' }, 'albo przeciągnij go tutaj')),
+        h('button', { class: 'btn lg', onclick: () => openAdd('url') }, h('span', { html: ic('link') }), 'Z adresu lub wklejony tekst')),
       h('div', { class: 'he-formats' }, ['PDF', 'EPUB', 'DOCX', 'TXT', 'MD', 'HTML'].map((f) => h('span', { class: 'fmt' }, f))),
       h('ul', { class: 'he-feats' }, feats.map(([i, t]) => h('li', {}, h('span', { html: ic(i) }), t)))));
 }
@@ -119,7 +119,7 @@ export async function mount(root) {
     const now = new Date();
     frag.append(h('header', { class: 'page-head' },
       h('div', {}, h('div', { class: 'kicker' }, now.toLocaleDateString('pl-PL', { weekday: 'long', day: 'numeric', month: 'long' })), h('h1', { class: 'display big' }, greeting())),
-      docs.length ? h('button', { class: 'btn primary head-add', onclick: () => pickFiles() }, h('span', { html: ic('plus') }), 'Dodaj dokument') : null));
+      docs.length ? h('button', { class: 'btn primary head-add', onclick: () => openAdd() }, h('span', { html: ic('plus') }), 'Dodaj dokument') : null));
 
     if (!docs.length) { frag.append(emptyState()); return frag; }
 

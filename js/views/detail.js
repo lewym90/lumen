@@ -6,6 +6,7 @@ import { coverEl, ring, progressBar, openMenu, openSheet, toast, confirmDialog, 
 import { chapterKicker, partLabel, minutesFor, pageRange, planFor, finishEstimate } from '../course.js';
 import { openDoc, renameDoc, deleteDoc } from './shared.js';
 import { pickBlock } from './blockpicker.js';
+import { openTagEditor } from './tags.js';
 import { PARSER_V } from '../import/importer.js';
 import { parseLabel } from '../import/structure.js';
 
@@ -232,6 +233,7 @@ export async function mount(root, { id }) {
     const back = h('a', { class: 'btn ghost sm back', href: '#/library' }, h('span', { html: ic('left') }), 'Biblioteka');
     const menuBtn = h('button', { class: 'icon-btn', 'aria-label': 'Więcej', html: ic('dots'), onclick: () => openMenu(menuBtn, [
       { icon: 'edit', label: 'Zmień tytuł', onClick: async () => { await renameDoc(meta); render(true); } },
+      { icon: 'tag', label: 'Tagi i półki…', onClick: () => openTagEditor(meta, () => render(true)) },
       { icon: 'scissors', label: editing ? 'Zakończ poprawianie podziału' : 'Popraw podział na rozdziały', onClick: () => { editing = !editing; render(true); } },
       { icon: 'refresh', label: 'Przywróć podział automatyczny', onClick: resetStructure },
       ...(meta.type !== 'unknown' ? [{ icon: 'refresh', label: 'Przetwórz plik ponownie', onClick: reprocess }] : []),
@@ -282,7 +284,7 @@ export async function mount(root, { id }) {
 
     const notice = [];
     if (meta.scanned) notice.push(h('div', { class: 'notice acc' }, h('span', { html: ic('info') }), 'To skan bez warstwy tekstowej — strony są obrazami. Rozpoznanie tekstu (OCR) zamieni je na zwykły tekst z rozdziałami, zakreślaniem, szukaniem i czytaniem na głos. Działa na Twoim urządzeniu, offline.', h('button', { class: 'btn sm primary', onclick: startOcr }, 'Rozpoznaj tekst')));
-    if (meta.type === 'pdf' && !meta.scanned && (meta.pv || 0) < PARSER_V) notice.push(h('div', { class: 'notice acc' }, h('span', { html: ic('info') }), 'Ten dokument został zaimportowany starszą wersją aplikacji. Nowa wersja dokładniej rozpoznaje strukturę i treść (m.in. artykuły, ustępy, dzielenie wyrazów). Przetworzenie zachowa Twój postęp i zakreślenia.', h('button', { class: 'btn sm primary', onclick: reprocess }, 'Przetwórz ponownie')));
+    if (meta.type === 'pdf' && !meta.scanned && (meta.pv || 0) < 2) notice.push(h('div', { class: 'notice acc' }, h('span', { html: ic('info') }), 'Ten dokument został zaimportowany starszą wersją aplikacji. Nowa wersja dokładniej rozpoznaje strukturę i treść (m.in. artykuły, ustępy, dzielenie wyrazów). Przetworzenie zachowa Twój postęp i zakreślenia.', h('button', { class: 'btn sm primary', onclick: reprocess }, 'Przetwórz ponownie')));
     if (editing) notice.push(h('div', { class: 'notice acc' }, h('span', { html: ic('scissors') }), 'Poprawianie podziału: w menu rozdziału (⋯) zmienisz nazwę, podzielisz go w dowolnym miejscu, przesuniesz początek albo scalisz z sąsiednim. Rozwiń rozdział strzałką, by utworzyć nowy od nagłówka.', h('button', { class: 'btn sm', onclick: () => { editing = false; render(true); } }, 'Gotowe')));
 
     page.replaceChildren(

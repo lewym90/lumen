@@ -347,3 +347,20 @@ mark.hit.cur { background: var(--accent); color: var(--accent-ink); box-shadow: 
 .ls-v:hover { background: var(--surface-2); }
 .ls-v.on { background: rgba(var(--accent-rgb), .14); color: var(--text); }
 .ls-v i .ic { width: 16px; height: 16px; color: var(--accent); }
+
+/* ── etykiety zakreśleń ── */
+.pn-filter { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 18px 8px; }
+.pn-filter[hidden] { display: none; }
+.chip.sm { padding: 5px 11px; font-size: 12.5px; gap: 6px; }
+.chip.sm i { font-style: normal; opacity: .65; font-size: 11.5px; }
+.chip.sm .hl-dot { width: 11px; height: 11px; border-width: 0; transform: none; }
+.chip.lbl.on .hl-dot { box-shadow: 0 0 0 2px var(--accent-ink); }
+.pn-where { margin-right: auto; align-self: center; color: var(--text-3); font-size: 11.5px; padding-left: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
+.lbl-edit { display: grid; gap: 12px; }
+.lbl-edit p { margin: 0 0 4px; font-size: 14px; }
+.lbl-row { display: flex; align-items: center; gap: 12px; }
+.lbl-row .field { flex: 1; min-width: 0; }
+.lbl-row .hl-dot { flex: none; pointer-events: none; }
+.ap-scope { display: flex; align-items: center; gap: 14px; justify-content: space-between; padding: 12px 14px; border-radius: 16px; background: var(--surface-2); border: 1px solid var(--line); }
+.ap-scope-t { display: grid; gap: 2px; min-width: 0; }
+.ap-scope-t small { color: var(--text-3); font-size: 12.5px; line-height: 1.4; }

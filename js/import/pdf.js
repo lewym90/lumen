@@ -3,6 +3,7 @@
 import { openPdf } from './pdfjs.js';
 import { TextBuilder, cleanStr } from './textbuild.js';
 import { detectLegal, parseLegal } from './legal.js';
+import { splitColumns } from './columns.js';
 import { normKey, yieldUI } from '../util.js';
 
 const BOLD_RE = /bold|black|heavy|semibold|demi|extrabold|[-_,]bd\b/i;
@@ -790,11 +791,12 @@ export async function parsePdf(file, onProgress = () => {}) {
 
 // Wspólna część: z linii tekstu (z PDF-a lub z OCR) budujemy bloki i wpisy spisu treści
 export async function structurePages(pdf, pages, meta, n, onProgress = () => {}) {
-  if (detectLegal(pages)) {
-    const lg = parseLegal(pages);
+  const sc = splitColumns(pages);
+  if (detectLegal(sc.pages, n)) {
+    const lg = parseLegal(sc.pages, n);
     if (lg.blocks.length > 20) {
       onProgress({ page: n, pages: n, frac: 1, phase: 'Gotowe' });
-      return { meta: { ...meta, title: lg.meta.title || meta.title, author: lg.meta.author || meta.author }, blocks: lg.blocks, entries: lg.entries, scanned: false, pdf, legal: true };
+      return { meta: { ...meta, title: lg.meta.title || meta.title, author: lg.meta.author || meta.author }, blocks: lg.blocks, entries: lg.entries, scanned: false, pdf, legal: true, columns: sc.columns };
     }
   }
 

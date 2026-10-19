@@ -62,7 +62,7 @@ async function shrinkImage(blob, maxW = 420) {
   } catch { return blob; }
 }
 
-export const PARSER_V = 2; // zwiększ, gdy zmienia się sposób rozpoznawania struktury
+export const PARSER_V = 3; // zwiększ, gdy zmienia się sposób rozpoznawania struktury
 
 async function parseByType(file, type, report) {
   let parsed;
@@ -82,7 +82,7 @@ async function parseByType(file, type, report) {
     const { parseHtmlString } = await import('./html.js');
     const src = await readText(file);
     report({ frac: 0.4, phase: 'Układam strukturę' });
-    const r = parseHtmlString(src, {});
+    const r = parseHtmlString(src, { web: !!file._web });
     parsed = { meta: { title: r.title, author: '' }, blocks: r.blocks, entries: [], assets: [] };
   } else if (type === 'md') {
     const { parseMarkdown } = await import('./text.js');
@@ -90,10 +90,22 @@ async function parseByType(file, type, report) {
     parsed = { meta: { title: r.title, author: '' }, blocks: r.blocks, entries: [], assets: [] };
   } else {
     const { parsePlainText } = await import('./text.js');
-    const r = parsePlainText(await readText(file));
+    const txt = await readText(file);
+    const legalLike = (txt.match(/^\s*Art\.\s*\d+[a-z]{0,3}\.\s/gm) || []).length >= 15;
+    const r = parsePlainText(txt, { lines: legalLike });
     parsed = { meta: { title: r.title, author: '' }, blocks: r.blocks, entries: [], assets: [] };
   }
 
+  if (type !== 'pdf' && !parsed.legal) {
+    const { detectLegalBlocks, legalizeBlocks } = await import('./legalblocks.js');
+    if (detectLegalBlocks(parsed.blocks)) {
+      const lg = legalizeBlocks(parsed.blocks);
+      if (lg.blocks.length > 20) {
+        parsed = { ...parsed, blocks: lg.blocks, entries: lg.entries, legal: true, meta: { ...parsed.meta, title: lg.meta.title || parsed.meta.title, author: lg.meta.author || parsed.meta.author } };
+      }
+    }
+  }
+  if (file._title) parsed.meta = { ...parsed.meta, title: file._title };
   return { parsed, pdfObj, fileTitle };
 }
 
@@ -114,7 +126,7 @@ function buildDoc(parsed, fileTitle) {
   return { blocks, chapters, title, cw, words: cw[blocks.length] };
 }
 
-export async function importFile(file, onProgress = () => {}) {
+export async function importFile(file, onProgress = () => {}, opts = {}) {
   const report = (o) => onProgress({ name: file.name, ...o });
   report({ frac: 0.02, phase: 'Sprawdzam plik' });
   await yieldUI();
@@ -150,7 +162,8 @@ export async function importFile(file, onProgress = () => {}) {
     pages: parsed.meta.pages || 0, words, chapterCount: chapters.length,
     addedAt: Date.now(), openedAt: 0, hue: hashStr(title) % 360,
     cover, scanned: !!parsed.scanned, pct: 0, prog: defaultProg(), deadline: null, auto: true,
-    fileName: file.name, pv: PARSER_V,
+    fileName: file.name, pv: PARSER_V, legal: !!parsed.legal,
+    ...(opts.src ? { src: opts.src } : {}), ...(file._web ? { web: true } : {}),
   };
   await saveMeta(meta);
 
@@ -179,6 +192,7 @@ export async function reimportDocument(meta, onProgress = () => {}) {
   const blob = await db.get('files', meta.id);
   if (!blob) throw new Error('Brak zapisanego oryginału — nie mogę ponownie przetworzyć tego pliku.');
   const file = new File([blob], meta.fileName || (meta.title + '.' + meta.type), { type: blob.type });
+  if (meta.web) file._web = true;
   const type = await sniff(file);
   const report = (o) => onProgress({ name: meta.title, ...o });
   const oldDoc = await db.get('content', meta.id);
@@ -243,7 +257,7 @@ export async function reimportDocument(meta, onProgress = () => {}) {
 
   await db.put('content', { blocks: nb, chapters: nd.chapters, auto: JSON.parse(JSON.stringify(nd.chapters)), v: 1 }, meta.id);
   for (const a of parsed.assets || []) await db.put('assets', a.blob, `${meta.id}/${a.key}`);
-  meta.words = nd.words; meta.chapterCount = nd.chapters.length; meta.prog = np; meta.auto = true; meta.pv = PARSER_V;
+  meta.words = nd.words; meta.chapterCount = nd.chapters.length; meta.prog = np; meta.auto = true; meta.pv = PARSER_V; meta.legal = !!parsed.legal;
   meta.pct = docProgress({ blocks: nb, chapters: nd.chapters, cw: nd.cw }, meta).pct;
   if (parsed.meta?.title && meta.title === fileTitle) meta.title = nd.title;
   await saveMeta(meta);
@@ -258,4 +272,74 @@ function chapterIdx(chs, bi) {
   let lo = 0, hi = chs.length - 1, ans = 0;
   while (lo <= hi) { const mid = (lo + hi) >> 1; if (chs[mid].start <= bi) { ans = mid; lo = mid + 1; } else hi = mid - 1; }
   return ans;
+}
+
+// ───────── import z adresu internetowego ─────────
+export class FetchError extends Error { constructor(msg, kind) { super(msg); this.kind = kind; } }
+
+// adresy ISAP / ELI → API Sejmu z tekstem aktu (HTML, a gdy go nie ma — PDF)
+export function sourceCandidates(raw) {
+  let u = String(raw || '').trim();
+  if (!u) throw new FetchError('Wpisz adres strony.', 'input');
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(u)) u = 'https://' + u;
+  let url;
+  try { url = new URL(u); } catch { throw new FetchError('To nie wygląda na poprawny adres.', 'input'); }
+  if (!/^https?:$/.test(url.protocol)) throw new FetchError('Obsługuję tylko adresy http i https.', 'input');
+  const eli = (pub, year, pos) => {
+    const base = `https://api.sejm.gov.pl/eli/acts/${pub}/${year}/${+pos}`;
+    return [`${base}/text.html`, `${base}/text.pdf`];
+  };
+  const isap = (url.hostname.endsWith('isap.sejm.gov.pl') ? (url.searchParams.get('id') || url.pathname).match(/W(DU|MP)(\d{4})\d{3}(\d{4})/i) : null);
+  if (isap) return eli(isap[1].toUpperCase(), isap[2], isap[3]);
+  const em = /(?:eli\.gov\.pl|api\.sejm\.gov\.pl)\/eli(?:\/acts)?\/(DU|MP)\/(\d{4})\/(\d+)/i.exec(url.href);
+  if (em && !/\/text\.(html|pdf)$/i.test(url.pathname)) return eli(em[1].toUpperCase(), em[2], em[3]);
+  return [url.href];
+}
+
+function nameFromUrl(href, ext) {
+  try {
+    const u = new URL(href);
+    const m = u.pathname.match(/\/eli\/(?:acts\/)?(DU|MP)\/(\d{4})\/(\d+)/i);
+    if (m) return `${m[1].toUpperCase()}-${m[2]}-${m[3]}.${ext}`;
+    const last = decodeURIComponent(u.pathname.split('/').filter(Boolean).pop() || u.hostname).replace(/\.[a-z0-9]{2,5}$/i, '');
+    return (last || u.hostname).slice(0, 60) + '.' + ext;
+  } catch { return 'strona.' + ext; }
+}
+
+export async function fetchSource(raw, onProgress = () => {}) {
+  const cands = sourceCandidates(raw);
+  let lastErr = null;
+  for (const href of cands) {
+    onProgress({ name: href, frac: 0.05, phase: 'Pobieram stronę' });
+    let res;
+    try {
+      res = await fetch(href, { credentials: 'omit', redirect: 'follow' });
+    } catch (e) {
+      lastErr = new FetchError('Przeglądarka nie pozwoliła pobrać tej strony (serwis nie udostępnia jej innym aplikacjom) albo brak połączenia.', 'cors');
+      continue;
+    }
+    if (!res.ok) { lastErr = new FetchError(`Serwer odpowiedział błędem ${res.status}.`, 'http'); continue; }
+    const ct = (res.headers.get('content-type') || '').toLowerCase();
+    const buf = await res.blob();
+    if (buf.size > 80 * 1024 * 1024) throw new FetchError('Plik jest zbyt duży.', 'size');
+    const head = new Uint8Array(await buf.slice(0, 5).arrayBuffer());
+    const isPdf = head[0] === 0x25 && head[1] === 0x50 && head[2] === 0x44 && head[3] === 0x46;
+    let file;
+    if (isPdf || ct.includes('pdf')) file = new File([buf], nameFromUrl(href, 'pdf'), { type: 'application/pdf' });
+    else if (ct.includes('html') || ct.includes('xml') || /\.x?html?$/i.test(href)) { file = new File([buf], nameFromUrl(href, 'html'), { type: 'text/html' }); file._web = true; }
+    else if (ct.startsWith('text/')) file = new File([buf], nameFromUrl(href, ct.includes('markdown') ? 'md' : 'txt'), { type: ct.split(';')[0] });
+    else if (ct.includes('epub') || ct.includes('officedocument')) file = new File([buf], nameFromUrl(href, ct.includes('epub') ? 'epub' : 'docx'), { type: ct.split(';')[0] });
+    else { lastErr = new FetchError('Ten adres nie prowadzi do dokumentu, który potrafię wczytać (PDF, HTML, tekst, EPUB, DOCX).', 'type'); continue; }
+    return { file, href };
+  }
+  throw lastErr || new FetchError('Nie udało się pobrać strony.', 'http');
+}
+
+// wklejony tekst → plik tekstowy
+export function textToFile(text, title) {
+  const clean = String(text || '').replace(/\r\n?/g, '\n');
+  const name = (title || '').trim().replace(/[\\/:*?"<>|]+/g, ' ').slice(0, 80) || 'Wklejony tekst';
+  const f = new File([clean], name + '.txt', { type: 'text/plain' });
+  if ((title || '').trim()) f._title = title.trim().slice(0, 120);
+  return f;
 }

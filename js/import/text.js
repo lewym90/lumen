@@ -126,7 +126,7 @@ export function parseMarkdown(src) {
   return { blocks, title };
 }
 
-export function parsePlainText(src) {
+export function parsePlainText(src, { lines: lineMode = false } = {}) {
   const text = src.replace(/\r\n?/g, '\n').replace(/ /g, ' ');
   const rawLines = text.split('\n');
   // blokowanie na pustych liniach
@@ -145,6 +145,10 @@ export function parsePlainText(src) {
     const med = lens[lens.length >> 1] || 0;
     const mx = lens[Math.floor(lens.length * 0.95)] || 0;
     wrapped = med >= 40 && med <= 110 && mx - med < 25;
+  }
+  if (lineMode) {
+    // akt prawny wklejony jako tekst: każda niepusta linia to osobny akapit, nic nie jest łączone ani zmieniane
+    return { blocks: rawLines.map((l) => l.trim()).filter(Boolean).map((t) => ({ t: 'p', x: t })), title: '' };
   }
   const noBlank = paras.length <= 2 && rawLines.length > 20;
 

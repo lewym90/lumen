@@ -1,16 +1,16 @@
 // Lumen — start aplikacji, powłoka, router, import
 import { $, h, ic, sleep, plural } from './util.js';
 import { installIcons } from './icons.js';
-import { settings, setSetting, bus, loadLibrary, loadStats, listDocs, getMeta, streak, todaySeconds, lib } from './state.js';
+import { settings, setSetting, getVal, bus, loadLibrary, loadStats, migrateLegal, listDocs, getMeta, streak, todaySeconds, lib } from './state.js';
 import { toast, openSheet, closeMenu } from './ui.js';
 import { requestPersistence } from './db.js';
-import { ACCEPT, importFile } from './import/importer.js';
+import { ACCEPT, importFile, fetchSource, textToFile, FetchError } from './import/importer.js';
 
 // ───── motyw ─────
 const mqDark = matchMedia('(prefers-color-scheme: dark)');
 export function applyTheme() {
   const root = document.documentElement;
-  let t = settings.theme;
+  let t = getVal('theme');
   if (t === 'auto') t = mqDark.matches ? 'night' : 'paper';
   root.dataset.theme = t;
   root.dataset.accent = settings.accent;
@@ -19,13 +19,14 @@ export function applyTheme() {
   const bg = getComputedStyle(root).getPropertyValue('--bg').trim();
   if (meta && bg) meta.setAttribute('content', bg);
 }
-bus.on('settings', (k) => { if (['theme', 'accent', 'motion'].includes(k)) applyTheme(); });
-mqDark.addEventListener?.('change', () => { if (settings.theme === 'auto') applyTheme(); });
+bus.on('settings', (k) => { if (['theme', 'accent', 'motion', 'ap'].includes(k)) applyTheme(); });
+mqDark.addEventListener?.('change', () => { if (getVal('theme') === 'auto') applyTheme(); });
 
 // ───── routing ─────
 const routes = {
   '': () => import('./views/home.js'),
   library: () => import('./views/library.js'),
+  search: () => import('./views/search.js'),
   stats: () => import('./views/stats.js'),
   settings: () => import('./views/settings.js'),
   doc: () => import('./views/detail.js'),
@@ -109,15 +110,17 @@ function buildShell() {
   const side = h('nav', { class: 'nav nav-side', 'aria-label': 'Główna nawigacja' },
     h('div', { class: 'brand' }, h('span', { class: 'logo', html: `<svg class="logo" viewBox="0 0 64 64" width="40" height="40"><use href="#i-logo"/></svg>` }),
       h('div', { class: 'txt' }, h('div', { class: 'name' }, 'Lumen'), h('div', { class: 'tag' }, 'czytaj · ucz się'))),
-    ...items.map(navItem),
+    ...items.slice(0, 2).map(navItem),
+    navItem(['search', 'search', 'Szukaj']),
+    ...items.slice(2).map(navItem),
     h('div', { class: 'nav-spacer' }),
     h('div', { class: 'nav-mini', id: 'nav-mini' }),
-    h('button', { class: 'btn primary nav-add', onclick: () => pickFiles() }, h('span', { html: ic('plus') }), h('span', {}, 'Dodaj dokument')));
+    h('button', { class: 'btn primary nav-add', onclick: () => openAdd() }, h('span', { html: ic('plus') }), h('span', {}, 'Dodaj dokument')));
 
   const bottom = h('nav', { class: 'nav nav-bottom', 'aria-label': 'Główna nawigacja' },
     h('div', { class: 'bar' },
       navItem(items[0]), navItem(items[1]),
-      h('button', { class: 'fab', 'aria-label': 'Dodaj dokument', onclick: () => pickFiles(), html: ic('plus') }),
+      h('button', { class: 'fab', 'aria-label': 'Dodaj dokument', onclick: () => openAdd(), html: ic('plus') }),
       navItem(items[2]), navItem(items[3])));
 
   const app = $('#app');
@@ -137,6 +140,46 @@ function updateNavMini() {
 }
 
 // ───── wybór i import plików ─────
+// okno „Dodaj dokument”: plik, adres internetowy albo wklejony tekst
+export function openAdd(tab = 'file') {
+  let cur = tab;
+  const tabs = h('div', { class: 'seg add-tabs' });
+  const pane = h('div', { class: 'add-pane' });
+  let sheet;
+  const TABS = [['file', 'Plik', 'upload'], ['url', 'Adres WWW', 'link'], ['paste', 'Wklej tekst', 'note']];
+  const paint = () => {
+    tabs.replaceChildren(...TABS.map(([k, l]) => h('button', { class: cur === k ? 'on' : '', onclick: () => { cur = k; paint(); } }, l)));
+    pane.replaceChildren();
+    if (cur === 'file') {
+      pane.append(
+        h('p', { class: 'muted' }, 'PDF (także skany — rozpoznam tekst), EPUB, DOCX, TXT, Markdown i HTML. Możesz też przeciągnąć plik na okno aplikacji.'),
+        h('button', { class: 'btn primary lg', onclick: () => { sheet.close(); setTimeout(pickFiles, 50); } }, h('span', { html: ic('upload') }), 'Wybierz pliki'));
+    } else if (cur === 'url') {
+      const inp = h('input', { class: 'field', type: 'url', inputmode: 'url', placeholder: 'https://…  (np. strona ustawy w ISAP albo plik PDF)', 'aria-label': 'Adres strony lub pliku', autocapitalize: 'off', spellcheck: 'false' });
+      const go2 = () => { const v = inp.value.trim(); if (!v) { inp.focus(); return; } sheet.close(); runImportUrl(v); };
+      inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); go2(); } });
+      pane.append(
+        h('p', { class: 'muted' }, 'Wklej adres strony z tekstem (HTML) albo bezpośredni link do PDF-a. Adresy aktów z ISAP i ELI (Sejm) zamienię na tekst jednolity z serwisu Sejmu.'),
+        inp,
+        h('p', { class: 'dim sm' }, 'Przeglądarka pozwala pobrać tylko strony, które same na to zezwalają. Gdy się nie uda, skopiuj tekst ze strony i użyj zakładki „Wklej tekst” albo zapisz stronę jako PDF/HTML i dodaj plik.'),
+        h('div', { class: 'hl-actions' }, h('button', { class: 'btn primary', onclick: go2 }, h('span', { html: ic('download') }), 'Pobierz i dodaj')));
+      setTimeout(() => inp.focus(), 250);
+    } else {
+      const ttl = h('input', { class: 'field', type: 'text', maxlength: 120, placeholder: 'Tytuł (opcjonalnie)', 'aria-label': 'Tytuł' });
+      const ta = h('textarea', { class: 'field paste-ta', rows: 9, placeholder: 'Wklej tutaj tekst — np. skopiowaną ustawę ze strony internetowej…', 'aria-label': 'Wklejony tekst' });
+      pane.append(
+        h('p', { class: 'muted' }, 'Tekst zostanie dodany do biblioteki dokładnie tak, jak go wkleisz. Akty prawne (Art., ust., pkt) są rozpoznawane automatycznie.'),
+        ttl, ta,
+        h('div', { class: 'hl-actions' }, h('button', { class: 'btn primary', onclick: () => {
+          if (ta.value.trim().length < 20) { toast('Wklej dłuższy fragment tekstu', { icon: 'note' }); ta.focus(); return; }
+          sheet.close(); runImportText(ta.value, ttl.value);
+        } }, 'Dodaj do biblioteki')));
+    }
+  };
+  paint();
+  sheet = openSheet({ title: 'Dodaj dokument', body: h('div', { class: 'add-sheet' }, tabs, pane) });
+}
+
 let fileInput;
 export function pickFiles() {
   if (!fileInput) {
@@ -148,7 +191,23 @@ export function pickFiles() {
 }
 
 let importing = false;
-export async function runImport(files) {
+export function runImport(files) {
+  return runJobs(files.map((f) => ({ name: f.name, run: (cb) => importFile(f, cb) })));
+}
+
+export function runImportUrl(url) {
+  return runJobs([{ name: url, run: async (cb) => {
+    const { file, href } = await fetchSource(url, cb);
+    return importFile(file, cb, { src: href });
+  } }]);
+}
+
+export function runImportText(text, title) {
+  const f = textToFile(text, title);
+  return runJobs([{ name: f.name, run: (cb) => importFile(f, cb) }]);
+}
+
+async function runJobs(files) {
   if (importing) { toast('Poczekaj, kończę poprzedni import…', { icon: 'clock' }); return; }
   importing = true;
   const visual = h('div', { class: 'import-visual' }, h('i', { class: 'pg' }), h('i', { class: 'pg' }), h('i', { class: 'pg' }));
@@ -168,8 +227,8 @@ export async function runImport(files) {
       const f = files[i];
       title.textContent = files.length > 1 ? `Dokument ${i + 1} z ${files.length}` : 'Przygotowuję dokument';
       try {
-        const res = await importFile(f, (p) => {
-          fname.textContent = p.name;
+        const res = await f.run((p) => {
+          fname.textContent = p.name || f.name;
           phase.textContent = p.phase || '';
           detail.textContent = p.detail || '';
           barFill.style.width = Math.round((p.frac || 0) * 100) + '%';
@@ -178,7 +237,8 @@ export async function runImport(files) {
         if (res.duplicate && files.length === 1) added.push(res.meta);
       } catch (e) {
         console.error(e);
-        toast(`${f.name}: ${e.message || 'nie udało się wczytać pliku'}`, { error: true, ms: 6000 });
+        toast(e instanceof FetchError ? e.message : `${f.name}: ${e.message || 'nie udało się wczytać pliku'}`, { error: true, ms: 7000 });
+        if (e instanceof FetchError && e.kind === 'cors') setTimeout(() => openAdd('paste'), 600);
       }
     }
   } finally {
@@ -249,6 +309,7 @@ async function boot() {
 
   await Promise.all([loadLibrary(), loadStats()]);
   setupDrop();
+  migrateLegal();
 
   if ('launchQueue' in window) {
     window.launchQueue.setConsumer(async (p) => {

@@ -3,6 +3,7 @@ import { h, ic, plural, fmtNum } from '../util.js';
 import { coverEl, openMenu, confirmDialog, promptDialog, toast, typeLabel } from '../ui.js';
 import { saveMeta, lib, bus, dropDocCache } from '../state.js';
 import { db } from '../db.js';
+import { openTagEditor } from './tags.js';
 
 export function openDoc(id) { location.hash = '#/read/' + id; }
 export function openPlan(id) { location.hash = '#/doc/' + id; }
@@ -32,6 +33,7 @@ export function docMenu(anchor, meta, { onChange } = {}) {
     { icon: 'book-open', label: 'Czytaj', onClick: () => openDoc(meta.id) },
     { icon: 'layers', label: 'Spis treści i rozdziały', onClick: () => openPlan(meta.id) },
     'hr',
+    { icon: 'tag', label: 'Tagi i półki…', onClick: () => openTagEditor(meta, onChange) },
     { icon: 'edit', label: 'Zmień tytuł', onClick: async () => { await renameDoc(meta); onChange && onChange(); } },
     { icon: 'trash', label: 'Usuń z biblioteki', danger: true, onClick: async () => { if (await deleteDoc(meta)) onChange && onChange(); } },
   ]);
@@ -52,6 +54,7 @@ export function docCard(meta, { onChange, compact = false } = {}) {
   card.append(ringWrap, h('div', { class: 'dc-body' },
     h('div', { class: 'dc-title' }, meta.title),
     h('div', { class: 'dc-sub' }, h('span', { class: 'dc-type' }, typeLabel(meta.type)), sub),
+    (meta.tags && meta.tags.length) || meta.legal ? h('div', { class: 'dc-tags' }, meta.legal ? h('span', { class: 'dc-tag legal' }, 'Akt prawny') : null, ...(meta.tags || []).slice(0, 1).map((t) => h('span', { class: 'dc-tag' }, t)), (meta.tags || []).length > 1 ? h('span', { class: 'dc-tag more' }, '+' + ((meta.tags || []).length - 1)) : null) : null,
     h('div', { class: 'bar-line thin' }, h('i', { style: { width: pct + '%' } }))), more);
   card.addEventListener('contextmenu', (e) => { e.preventDefault(); docMenu({ x: e.clientX, y: e.clientY }, meta, { onChange }); });
   return card;

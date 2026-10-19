@@ -1,14 +1,14 @@
 // Kopia zapasowa: postęp, zakreślenia, notatki, statystyki (bez samych plików)
 import { db, kv } from './db.js';
-import { listDocs, stats, settings, saveMeta, bus, defaultProg, lib } from './state.js';
+import { listDocs, stats, settings, setSetting, saveMeta, bus, defaultProg, lib } from './state.js';
 import { downloadBlob, uid, dayKey } from './util.js';
 
 export async function exportBackup() {
   const docs = listDocs();
-  const out = { app: 'lumen', v: 1, at: Date.now(), docs: [], stats: { days: stats.days, wpm: stats.wpm, totalSec: stats.totalSec, totalWords: stats.totalWords }, settings };
+  const out = { app: 'lumen', v: 1, at: Date.now(), labels: settings.hlLabels, docs: [], stats: { days: stats.days, wpm: stats.wpm, totalSec: stats.totalSec, totalWords: stats.totalWords }, settings };
   for (const m of docs) {
     const marks = await db.byDoc(m.id);
-    out.docs.push({ fp: m.fp, title: m.title, pct: m.pct, prog: m.prog, deadline: m.deadline, marks });
+    out.docs.push({ fp: m.fp, title: m.title, pct: m.pct, prog: m.prog, deadline: m.deadline, tags: m.tags || [], ap: m.ap || null, marks });
   }
   const blob = new Blob([JSON.stringify(out)], { type: 'application/json' });
   downloadBlob(blob, `lumen-kopia-${dayKey()}.json`);
@@ -19,6 +19,8 @@ export async function applyOrphan(meta, entry) {
   meta.prog = { ...defaultProg(), ...(entry.prog || {}) };
   meta.pct = entry.pct || 0;
   meta.deadline = entry.deadline || null;
+  if (entry.tags && entry.tags.length) meta.tags = entry.tags;
+  if (entry.ap) meta.ap = entry.ap;
   for (const m of entry.marks || []) await db.put('marks', { ...m, id: uid(), doc: meta.id });
   await saveMeta(meta);
 }
@@ -26,6 +28,7 @@ export async function applyOrphan(meta, entry) {
 export async function importBackup(file) {
   const data = JSON.parse(await file.text());
   if (data.app !== 'lumen') throw new Error('To nie jest kopia zapasowa Lumen.');
+  if (Array.isArray(data.labels) && data.labels.length === 5) setSetting('hlLabels', data.labels);
   const orphans = await kv.get('orphans', {});
   let applied = 0, pending = 0;
   for (const d of data.docs || []) {

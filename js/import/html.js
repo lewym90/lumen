@@ -199,6 +199,7 @@ export function parseHtmlDoc(doc, opts = {}) {
 export function parseHtmlString(html, opts = {}) {
   const doc = new DOMParser().parseFromString(html, 'text/html');
   doc.querySelectorAll('script,style,noscript,template').forEach((e) => e.remove());
+  if (opts.web) doc.querySelectorAll('nav,footer,aside,form,[role=navigation],[role=banner],[aria-hidden=true]').forEach((e) => e.remove());
   const title = (doc.querySelector('title')?.textContent || '').trim();
   const main = doc.querySelector('article, main');
   const target = main && main.textContent.length > doc.body.textContent.length * 0.5 ? main : doc.body;

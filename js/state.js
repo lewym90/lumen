@@ -16,6 +16,7 @@ const DEFAULTS = {
   goalMin: 30, deadlineMode: true,
   ttsRate: 1, ttsNext: false, ttsVoice: '',
   motion: 'auto',
+  hlLabels: ['Ważne', 'Do sprawdzenia', 'Definicja', 'Przykład', 'Pytanie'],
 };
 export const settings = (() => {
   try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem('lumen.settings') || '{}') }; } catch { return { ...DEFAULTS }; }
@@ -26,6 +27,32 @@ export function setSetting(key, val) {
   bus.emit('settings', key);
 }
 
+// Ustawienia wyglądu per dokument: meta.ap (obiekt) istnieje tylko, gdy włączono „tylko dla tego dokumentu”
+export const AP_KEYS = ['theme', 'font', 'size', 'lh', 'width', 'gap', 'align'];
+export const scope = { meta: null };
+export function getVal(key) {
+  const ap = scope.meta && scope.meta.ap;
+  return ap && ap[key] !== undefined ? ap[key] : settings[key];
+}
+let apTimer = null;
+export function setVal(key, val) {
+  const m = scope.meta;
+  if (m && m.ap && AP_KEYS.includes(key)) {
+    m.ap[key] = val;
+    clearTimeout(apTimer);
+    apTimer = setTimeout(() => { saveMeta(m).catch(() => {}); }, 400);
+    bus.emit('settings', key);
+  } else setSetting(key, val);
+}
+export function setDocScope(meta, on) {
+  if (!meta) return;
+  if (on) meta.ap = Object.fromEntries(AP_KEYS.map((k) => [k, getVal(k)]));
+  else delete meta.ap;
+  clearTimeout(apTimer);
+  saveMeta(meta).catch(() => {});
+  bus.emit('settings', 'ap');
+}
+
 // ───── Biblioteka ─────
 export const lib = { docs: new Map() };
 
@@ -34,6 +61,22 @@ export async function loadLibrary() {
   lib.docs.clear();
   all.forEach((m) => lib.docs.set(m.id, m));
   return all;
+}
+
+// jednorazowo: dokumenty dodane starszą wersją nie mają znacznika aktu prawnego
+export async function migrateLegal() {
+  let changed = false;
+  for (const m of [...lib.docs.values()]) {
+    if (m.legal !== undefined) continue;
+    try {
+      const c = await db.get('content', m.id);
+      m.legal = !!(c && c.blocks.some((b) => b.art));
+      await db.put('meta', m);
+      changed = true;
+    } catch { /* pomiń */ }
+    await new Promise((r) => setTimeout(r, 0));
+  }
+  if (changed) bus.emit('library');
 }
 
 export function listDocs() { return [...lib.docs.values()]; }
@@ -55,6 +98,8 @@ export async function loadDoc(id) {
   if (!c) return null;
   c.cw = buildWordIndex(c);
   c.id = id;
+  const m0 = lib.docs.get(id);
+  if (m0 && m0.legal === undefined) { m0.legal = c.blocks.some((b) => b.art); db.put('meta', m0).catch(() => {}); }
   cache = { id, doc: c };
   return c;
 }

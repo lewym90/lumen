@@ -1,7 +1,7 @@
 // Czytnik: rozdział jako sesja, pozycja, zakreślenia, szukanie, czytanie na głos
 import { h, ic, esc, clamp, debounce, throttleRaf, uid, foldText, fmtMinutes, fmtNum, plural, downloadBlob, raf, sleep } from '../util.js';
 import { db } from '../db.js';
-import { settings, setSetting, bus, loadDoc, saveMeta, saveContent, chapterInfo, docProgress, addReading, stats, wordsToMinutes, defaultProg } from '../state.js';
+import { settings, setSetting, scope, bus, loadDoc, saveMeta, saveContent, chapterInfo, docProgress, addReading, stats, wordsToMinutes, defaultProg } from '../state.js';
 import { chapterEnd, sectionsOf, chapterOfBlock, blockWords, buildWordIndex } from '../import/structure.js';
 import { chapterKicker, chapterFull, partLabel, minutesFor } from '../course.js';
 import { toast, openSheet, openMenu, ring, sparkBurst, closeMenu, promptDialog } from '../ui.js';
@@ -10,7 +10,7 @@ import { chapterBodyHtml, openerHtml, textHtml, blockHtml } from './render.js';
 import { openPageViewer, openFigureZoom, observeScanPages, observeFigures, releasePdf } from './pageview.js';
 import { Narrator, ttsSupported, loadVoices, pickVoice } from './tts.js';
 
-const HL_COLORS = 5;
+import { HL_COLORS, hlLabel, editLabels, buildExport, saveExport } from './labels.js';
 let R = null;
 
 // ───────────── API ─────────────
@@ -26,6 +26,8 @@ export async function openReader(meta, params = {}) {
     lastScrollTop: 0, narrator: null, voices: [], cleanups: [], doneThis: false, destroyed: false,
     hasPdf: meta.type === 'pdf', scanned: !!meta.scanned,
   };
+  scope.meta = meta;
+  bus.emit('settings', 'ap');
   buildDom();
   meta.openedAt = Date.now();
   saveMeta(meta);
@@ -38,6 +40,7 @@ export async function openReader(meta, params = {}) {
   else pos = resumeFor(ci, params.c == null);
   if (params.b != null) ci = chapterOfBlock(doc, +params.b);
   await renderChapter(ci, pos, { first: true });
+  if (params.q) { runSearch(String(params.q)); applyHitsToView(); }
   requestAnimationFrame(() => R.root.classList.add('in'));
   if (!ttsSupported) R.root.querySelector('[data-tool="listen"]')?.setAttribute('hidden', '');
 }
@@ -48,7 +51,7 @@ export function reopen(meta, params = {}) {
     let ci = clamp(+(params.c ?? R.ci) || 0, 0, R.doc.chapters.length - 1);
     let pos = params.b != null ? { bi: +params.b, frac: 0 } : resumeFor(ci, false);
     if (params.b != null) ci = chapterOfBlock(R.doc, +params.b);
-    renderChapter(ci, pos);
+    renderChapter(ci, pos).then(() => { if (params.q && R) { runSearch(String(params.q)); applyHitsToView(); } });
   }
 }
 
@@ -65,6 +68,8 @@ export function closeReader(immediate = false) {
   document.body.classList.remove('reading');
   document.querySelector('.scrim')?.remove();
   R = null;
+  scope.meta = null;
+  bus.emit('settings', 'ap');
   if (immediate) { r.root.remove(); return; }
   r.root.classList.remove('in');
   r.root.classList.add('leaving');
@@ -157,7 +162,7 @@ function buildDom() {
   window.addEventListener('pagehide', saveSync);
   const onSettings = (k) => {
     if (!R) return;
-    if (['font', 'size', 'lh', 'width', 'gap', 'align'].includes(k)) {
+    if (['font', 'size', 'lh', 'width', 'gap', 'align', 'ap'].includes(k)) {
       const p = currentPos();
       applyReadingVars(R.root);
       requestAnimationFrame(() => restorePos(p));
@@ -660,27 +665,49 @@ function buildNotes() {
   let tab = R.notesTab || 'hl';
   const head = h('div', { class: 'pn-head' },
     h('div', { class: 'pn-ht' }, h('b', {}, 'Notatki i zakładki'), h('small', {}, 'Twoje zakreślenia z całego dokumentu')),
-    h('button', { class: 'icon-btn', 'aria-label': 'Eksportuj notatki', title: 'Eksportuj do Markdown', html: ic('download'), onclick: exportNotes }),
+    h('button', { class: 'icon-btn', 'aria-label': 'Nazwy kolorów', title: 'Nazwy kolorów', html: ic('tag'), onclick: () => editLabels(() => { buildNotes(); }) }),
+    h('button', { class: 'icon-btn', 'aria-label': 'Eksportuj notatki', title: 'Eksportuj notatki', html: ic('download'), onclick: (e) => exportMenu(e.currentTarget) }),
     h('button', { class: 'icon-btn', 'aria-label': 'Zamknij', html: ic('close'), onclick: () => togglePanel(null) }));
   const tabs = h('div', { class: 'seg pn-tabs' });
+  const filt = h('div', { class: 'pn-filter' });
   const body = h('div', { class: 'pn-list' });
   const paint = () => {
     tabs.replaceChildren(...[['hl', 'Zakreślenia'], ['bm', 'Zakładki']].map(([k, l]) => h('button', { class: tab === k ? 'on' : '', onclick: () => { tab = k; R.notesTab = k; paint(); } }, l, h('i', {}, marksSorted(k).length))));
-    const items = marksSorted(tab);
+    const all = marksSorted(tab);
+    // filtr kolorów / etykiet
+    filt.replaceChildren();
+    filt.hidden = tab !== 'hl' || !all.length;
+    let items = all;
+    if (tab === 'hl') {
+      if (R.notesColor != null && !all.some((m) => m.c === R.notesColor)) R.notesColor = null;
+      const cnt = (i) => all.filter((m) => m.c === i).length;
+      filt.append(h('button', { class: 'chip sm' + (R.notesColor == null ? ' on' : ''), onclick: () => { R.notesColor = null; paint(); } }, 'Wszystkie'));
+      for (let i = 0; i < HL_COLORS; i++) {
+        if (!cnt(i)) continue;
+        filt.append(h('button', { class: 'chip sm lbl' + (R.notesColor === i ? ' on' : ''), onclick: () => { R.notesColor = R.notesColor === i ? null : i; paint(); } },
+          h('span', { class: 'hl-dot c' + i }), hlLabel(i), h('i', {}, cnt(i))));
+      }
+      if (R.notesColor != null) items = all.filter((m) => m.c === R.notesColor);
+      filt.append(h('button', { class: 'chip sm' + (R.notesGroup ? ' on' : ''), title: 'Grupuj według etykiet', onclick: () => { R.notesGroup = !R.notesGroup; paint(); } }, 'Grupuj'));
+    }
     body.replaceChildren();
     if (!items.length) {
       body.append(h('div', { class: 'pn-empty' }, h('span', { html: ic(tab === 'hl' ? 'highlighter' : 'bookmark') }), h('p', {}, tab === 'hl' ? 'Zaznacz fragment tekstu, aby go zakreślić lub dodać notatkę.' : 'Dotknij ikony zakładki (B), aby zapamiętać miejsce.')));
       return;
     }
-    let lastCh = -1;
+    const group = tab === 'hl' && R.notesGroup;
+    if (group) items = items.slice().sort((a, b) => (a.c - b.c) || (a.b - b.b) || ((a.s || 0) - (b.s || 0)));
+    let lastKey = null;
     for (const m of items) {
       const ci = chapterOfBlock(doc, m.b);
-      if (ci !== lastCh) { lastCh = ci; body.append(h('div', { class: 'pn-ch' }, doc.chapters[ci].title)); }
+      const key = group ? 'c' + m.c : ci;
+      if (key !== lastKey) { lastKey = key; body.append(h('div', { class: 'pn-ch' }, group ? hlLabel(m.c) : doc.chapters[ci].title)); }
       if (m.kind === 'hl') {
         body.append(h('div', { class: 'pn-item' },
           h('button', { class: 'pn-q hc' + m.c, onclick: () => { jumpTo(m.b); } }, h('span', { class: 'qdot' }), h('span', { class: 'qt' }, m.text)),
           m.note ? h('div', { class: 'pn-note' }, m.note) : null,
           h('div', { class: 'pn-act' },
+            group ? h('small', { class: 'pn-where' }, doc.chapters[ci].title) : h('small', { class: 'pn-where' }, hlLabel(m.c)),
             h('button', { class: 'icon-btn sm', 'aria-label': 'Edytuj', html: ic('edit'), onclick: () => openHighlight(m.id) }),
             h('button', { class: 'icon-btn sm', 'aria-label': 'Usuń', html: ic('trash'), onclick: async () => { await removeMark(m.id); paint(); } }))));
       } else {
@@ -691,7 +718,7 @@ function buildNotes() {
     }
   };
   paint();
-  R.sidePanel.replaceChildren(head, tabs, body);
+  R.sidePanel.replaceChildren(head, tabs, filt, body);
 }
 
 function jumpTo(bi) {
@@ -701,19 +728,20 @@ function jumpTo(bi) {
   else scrollToBlock(bi, true);
 }
 
-function exportNotes() {
-  const { doc, meta } = R;
-  let md = `# Notatki — ${meta.title}\n\n`;
-  let lastCh = -1;
-  const all = R.marks.filter((m) => m.kind === 'hl' || m.kind === 'bm').sort((a, b) => a.b - b.b || (a.s || 0) - (b.s || 0));
-  for (const m of all) {
-    const ci = chapterOfBlock(doc, m.b);
-    if (ci !== lastCh) { lastCh = ci; md += `\n## ${doc.chapters[ci].title}\n\n`; }
-    if (m.kind === 'hl') md += `> ${m.text}\n${m.note ? `\n${m.note}\n` : ''}\n`;
-    else md += `- 🔖 ${m.text || 'Zakładka'}\n`;
-  }
-  downloadBlob(new Blob([md], { type: 'text/markdown;charset=utf-8' }), `notatki-${meta.title.slice(0, 40).replace(/[^\p{L}\p{N}]+/gu, '-')}.md`);
-  toast('Zapisano notatki jako Markdown', { icon: 'download' });
+function exportMenu(anchor) {
+  const run = (kind, group) => {
+    const { doc, meta } = R;
+    const d = buildExport({ title: meta.title, marks: R.marks, chapterOf: (bi) => doc.chapters[chapterOfBlock(doc, bi)].title, group });
+    if (!d.count) { toast('Nie ma jeszcze żadnych notatek do eksportu', { icon: 'note' }); return; }
+    saveExport(kind, meta.title, d);
+  };
+  openMenu(anchor, [
+    { icon: 'download', label: 'Word (.doc) — według rozdziałów', onClick: () => run('doc', false) },
+    { icon: 'download', label: 'Word (.doc) — według etykiet', onClick: () => run('doc', true) },
+    'hr',
+    { icon: 'download', label: 'Markdown — według rozdziałów', onClick: () => run('md', false) },
+    { icon: 'download', label: 'Markdown — według etykiet', onClick: () => run('md', true) },
+  ]);
 }
 
 // ───────────── wyszukiwanie ─────────────
@@ -900,7 +928,7 @@ function openHighlight(id) {
   ta.value = m.note || '';
   const colors = h('div', { class: 'hl-colors' });
   const paintC = () => colors.querySelectorAll('button').forEach((b, i) => b.classList.toggle('on', i === m.c));
-  for (let i = 0; i < HL_COLORS; i++) colors.append(h('button', { class: 'hl-dot c' + i, 'aria-label': 'Kolor ' + (i + 1), onclick: async () => { m.c = i; await db.put('marks', m); rerenderBlock(m.b); paintC(); } }));
+  for (let i = 0; i < HL_COLORS; i++) colors.append(h('button', { class: 'hl-dot c' + i, 'aria-label': hlLabel(i), title: hlLabel(i), onclick: async () => { m.c = i; await db.put('marks', m); rerenderBlock(m.b); paintC(); } }));
   paintC();
   const body = h('div', { class: 'hl-edit' },
     h('blockquote', { class: 'hl-quote hc' + m.c }, m.text),
@@ -957,7 +985,7 @@ function showSelBar(range) {
   const bar = R.selBar;
   const prev = (e) => e.preventDefault();
   bar.replaceChildren(
-    ...Array.from({ length: HL_COLORS }, (_, i) => h('button', { class: 'hl-dot c' + i, 'aria-label': 'Zakreśl kolorem ' + (i + 1), onpointerdown: prev, onclick: () => addHighlights(i) })),
+    ...Array.from({ length: HL_COLORS }, (_, i) => h('button', { class: 'hl-dot c' + i, 'aria-label': 'Zakreśl: ' + hlLabel(i), title: hlLabel(i), onpointerdown: prev, onclick: () => addHighlights(i) })),
     h('span', { class: 'sb-sep' }),
     h('button', { class: 'icon-btn sm', 'aria-label': 'Dodaj notatkę', title: 'Notatka', onpointerdown: prev, onclick: () => addHighlights(0, true), html: ic('note') }),
     h('button', { class: 'icon-btn sm', 'aria-label': 'Kopiuj', title: 'Kopiuj', onpointerdown: prev, onclick: async () => { try { await navigator.clipboard.writeText(getSelection().toString()); toast('Skopiowano', { icon: 'copy', ms: 1400 }); } catch { /* brak */ } }, html: ic('copy') }));
@@ -976,7 +1004,7 @@ function showSelBar(range) {
 
 // ───────────── wygląd ─────────────
 function openAppearance() {
-  const body = buildAppearance({ showTheme: true, showPreview: false });
+  const body = buildAppearance({ showTheme: true, showPreview: false, meta: R.meta });
   const s = openSheet({ title: 'Wygląd tekstu', body, className: 'ap-sheet' });
   void s;
 }

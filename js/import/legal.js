@@ -2,24 +2,24 @@
 // Działa na liniach wyciągniętych z PDF-a (patrz pdf.js → extractLines).
 import { TextBuilder } from './textbuild.js';
 
-const ART_RE = /^Art\.\s*(\d+[a-z]{0,3})(?:\s*[–-]\s*(\d+[a-z]{0,3}))?\.(?:\s+|$)/;
-const HEAD_RE = /^(KSIĘGA|Księga|TYTUŁ|Tytuł|CZĘŚĆ|Część|DZIAŁ|Dział|ROZDZIAŁ|Rozdział|ODDZIAŁ|Oddział)\s+([IVXLCDM]+|\d+[a-z]{0,3})\.?$/;
+export const ART_RE = /^Art\.\s*(\d+[a-z]{0,3})(?:\s*[–-]\s*(\d+[a-z]{0,3}))?\.(?:\s+|$)/;
+export const HEAD_RE = /^(KSIĘGA|Księga|TYTUŁ|Tytuł|CZĘŚĆ|Część|DZIAŁ|Dział|ROZDZIAŁ|Rozdział|ODDZIAŁ|Oddział)\s+([IVXLCDM]+|\d+[a-z]{0,3})\.?$/;
 const RANK = { księga: 0, tytuł: 1, część: 2, dział: 3, rozdział: 4, oddział: 5 };
-const UST_RE = /^(\d{1,3})([a-z]{0,3})\.(?:\s+(?=\S)|(?=\d{1,3}\)\s))/;
-const PKT_RE = /^(\d{1,3}[a-z]{0,3})\)\s+(?=\S)/;
-const LIT_RE = /^([a-z]{1,2})\)\s+(?=\S)/;
-const DASH_RE = /^[–—-]\s+(?=\S)/;
-const DZU_RE = /^Dz\.\s*U\./;
+export const UST_RE = /^(\d{1,3})([a-z]{0,3})\.(?:\s+(?=\S)|(?=\d{1,3}\)\s))/;
+export const PKT_RE = /^(\d{1,3}[a-z]{0,3})\)\s+(?=\S)/;
+export const LIT_RE = /^([a-z]{1,2})\)\s+(?=\S)/;
+export const DASH_RE = /^[–—-]\s+(?=\S)/;
+export const DZU_RE = /^Dz\.\s*U\./;
 const LET = 'A-Za-zĄĆĘŁŃÓŚŹŻąćęłńóśźż';
 
-const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+export const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
 const unspace = (s) => (/^(\S\s){3,}\S$/.test(s.trim()) ? s.replace(/\s+/g, '') : s);
 const keyOf = (s) => s.toLowerCase().replace(/\d+/g, '#').replace(/\s+/g, ' ').trim();
 
-export function detectLegal(pages) {
+export function detectLegal(pages, n = pages.length) {
   let arts = 0, lines = 0;
   for (const p of pages) for (const l of p.lines) { lines++; if (ART_RE.test(l.text)) arts++; }
-  return arts >= 15 && arts / Math.max(1, pages.length) >= 0.25 && arts / Math.max(1, lines) > 0.004;
+  return arts >= 15 && arts / Math.max(1, n) >= 0.25 && arts / Math.max(1, lines) > 0.004;
 }
 
 // linia → runy (przerwy między segmentami zamieniamy na pojedynczą spację)
@@ -67,7 +67,60 @@ function splitMargin(lines, W, body) {
   return { body: out, side };
 }
 
-export function parseLegal(pages) {
+
+// poziomy nagłówków + wybór podziału na rozdziały (wspólne dla PDF-a i tekstów HTML/DOCX/TXT)
+export function legalEntries(blocks, headings) {
+  // ── poziomy nagłówków i podział na rozdziały ──
+  const kinds = [...new Set(headings.map((h) => h.kind))].sort((a, b) => RANK[a] - RANK[b]);
+  const lvlOf = new Map(kinds.map((k, i) => [k, i + 1]));
+  for (const h of headings) blocks[h.block].l = Math.min(4, lvlOf.get(h.kind));
+
+  const words = (a, b) => { let n = 0; for (let i = a; i < b; i++) n += (blocks[i].x || '').split(/\s+/).length; return n; };
+  const total = words(0, blocks.length);
+  const stat = kinds.map((k) => {
+    const hs = headings.filter((h) => h.kind === k);
+    let mxw = 0;
+    for (let i = 0; i < hs.length; i++) {
+      // rozmiar sekcji: do następnego nagłówka tego samego lub wyższego rzędu
+      let end = blocks.length;
+      for (let j = headings.indexOf(hs[i]) + 1; j < headings.length; j++) if (RANK[headings[j].kind] <= RANK[k]) { end = headings[j].block; break; }
+      mxw = Math.max(mxw, words(hs[i].block, end));
+    }
+    return { k, n: hs.length, avg: total / Math.max(1, hs.length), max: mxw };
+  });
+  const chosen = stat.find((s) => s.n >= 3 && s.max <= 8000) || [...stat].reverse().find((s) => s.n >= 3);
+  const entries = [];
+  if (chosen) {
+    const cl = lvlOf.get(chosen.k);
+    const hs = headings.map((h) => ({ ...h, lv: lvlOf.get(h.kind) }));
+    for (let i = 0; i < hs.length; i++) {
+      const h = hs[i];
+      if (h.lv > cl) continue;
+      if (h.lv === cl) { entries.push({ title: h.text, level: 2, block: h.block }); continue; }
+      let hasChild = false;
+      for (let k = i + 1; k < hs.length && hs[k].lv > h.lv; k++) if (hs[k].lv <= cl) { hasChild = true; break; }
+      entries.push({ title: h.text, level: hasChild ? 1 : 2, block: h.block, solo: !hasChild });
+    }
+  } else {
+    const arts = [];
+    blocks.forEach((b, i) => { if (b.art) arts.push(i); });
+    let acc = 0, firstArt = null;
+    for (let k = 0; k < arts.length; k++) {
+      const i = arts[k];
+      const nextI = k + 1 < arts.length ? arts[k + 1] : blocks.length;
+      if (firstArt == null) firstArt = i;
+      acc += words(i, nextI);
+      if (acc >= 3000 || k === arts.length - 1) {
+        const a = blocks[firstArt].art.split('–')[0], z = blocks[i].art.split('–').pop();
+        entries.push({ title: a === z ? `Art. ${a}` : `Art. ${a}–${z}`, level: 2, block: entries.length ? firstArt : 0 });
+        firstArt = null; acc = 0;
+      }
+    }
+  }
+  return entries;
+}
+
+export function parseLegal(pages, nPages = pages.length) {
   const ocr = !!pages.ocr;
   // ── wielkości globalne: tekst podstawowy, lewy margines ──
   const sizeW = new Map(), xW = new Map();
@@ -109,7 +162,7 @@ export function parseLegal(pages) {
       for (const k of [keyOf(l.text), ...l.segs.map((s) => keyOf(s.text))]) if (k.length > 1 && !seen.has(k)) { seen.add(k); rep.set(k, (rep.get(k) || 0) + 1); }
     }
   }
-  const thr = Math.max(4, pages.length * 0.3);
+  const thr = Math.max(4, nPages * 0.3);
 
   const blocks = [];
   const headings = [];
@@ -221,7 +274,7 @@ export function parseLegal(pages) {
 
       // nagłówki: Dział / Rozdział / Oddział …
       const hm = text.match(HEAD_RE);
-      if (hm && l.x0 > left + 40) {
+      if (hm && l.x0 > left + Math.min(40, body * 3.2)) {
         inFront = false;
         flushFn();
         pushBlock();
@@ -242,7 +295,7 @@ export function parseLegal(pages) {
       }
       inFront = false;
 
-      const indented = l.x0 > left + 15;
+      const indented = l.x0 > left + Math.min(15, body * 0.9);
 
       // artykuł
       const am = indented ? text.match(ART_RE) : null;
@@ -319,53 +372,7 @@ export function parseLegal(pages) {
   blocks.unshift(...front);
   headings.forEach((h) => { h.block += shift; });
 
-  // ── poziomy nagłówków i podział na rozdziały ──
-  const kinds = [...new Set(headings.map((h) => h.kind))].sort((a, b) => RANK[a] - RANK[b]);
-  const lvlOf = new Map(kinds.map((k, i) => [k, i + 1]));
-  for (const h of headings) blocks[h.block].l = Math.min(4, lvlOf.get(h.kind));
-
-  const words = (a, b) => { let n = 0; for (let i = a; i < b; i++) n += (blocks[i].x || '').split(/\s+/).length; return n; };
-  const total = words(0, blocks.length);
-  const stat = kinds.map((k) => {
-    const hs = headings.filter((h) => h.kind === k);
-    let mxw = 0;
-    for (let i = 0; i < hs.length; i++) {
-      // rozmiar sekcji: do następnego nagłówka tego samego lub wyższego rzędu
-      let end = blocks.length;
-      for (let j = headings.indexOf(hs[i]) + 1; j < headings.length; j++) if (RANK[headings[j].kind] <= RANK[k]) { end = headings[j].block; break; }
-      mxw = Math.max(mxw, words(hs[i].block, end));
-    }
-    return { k, n: hs.length, avg: total / Math.max(1, hs.length), max: mxw };
-  });
-  const chosen = stat.find((s) => s.n >= 3 && s.max <= 8000) || [...stat].reverse().find((s) => s.n >= 3);
-  const entries = [];
-  if (chosen) {
-    const cl = lvlOf.get(chosen.k);
-    const hs = headings.map((h) => ({ ...h, lv: lvlOf.get(h.kind) }));
-    for (let i = 0; i < hs.length; i++) {
-      const h = hs[i];
-      if (h.lv > cl) continue;
-      if (h.lv === cl) { entries.push({ title: h.text, level: 2, block: h.block }); continue; }
-      let hasChild = false;
-      for (let k = i + 1; k < hs.length && hs[k].lv > h.lv; k++) if (hs[k].lv <= cl) { hasChild = true; break; }
-      entries.push({ title: h.text, level: hasChild ? 1 : 2, block: h.block, solo: !hasChild });
-    }
-  } else {
-    const arts = [];
-    blocks.forEach((b, i) => { if (b.art) arts.push(i); });
-    let acc = 0, firstArt = null;
-    for (let k = 0; k < arts.length; k++) {
-      const i = arts[k];
-      const nextI = k + 1 < arts.length ? arts[k + 1] : blocks.length;
-      if (firstArt == null) firstArt = i;
-      acc += words(i, nextI);
-      if (acc >= 3000 || k === arts.length - 1) {
-        const a = blocks[firstArt].art.split('–')[0], z = blocks[i].art.split('–').pop();
-        entries.push({ title: a === z ? `Art. ${a}` : `Art. ${a}–${z}`, level: 2, block: entries.length ? firstArt : 0 });
-        firstArt = null; acc = 0;
-      }
-    }
-  }
+  const entries = legalEntries(blocks, headings);
   for (const e of entries) e.legal = true;
 
   const meta = {

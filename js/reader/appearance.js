@@ -1,6 +1,6 @@
 // Panel wyglądu (motyw, akcent, czcionka, rozmiar…) — używany w czytniku i w ustawieniach
 import { h, ic } from '../util.js';
-import { settings, setSetting, bus } from '../state.js';
+import { settings, setSetting, getVal, setVal, setDocScope, bus } from '../state.js';
 
 export const THEMES = [
   ['night', 'Noc', '#0b0e22', '#e8eaf8'],
@@ -18,32 +18,42 @@ export const FONTS = [
 ];
 
 export function applyReadingVars(el) {
-  const fam = { serif: "'Literata', Georgia, serif", sans: "'Inter', system-ui, sans-serif", hyper: "'Atkinson Hyperlegible', system-ui, sans-serif", system: 'system-ui, -apple-system, Segoe UI, sans-serif' }[settings.font] || 'serif';
+  const fam = { serif: "'Literata', Georgia, serif", sans: "'Inter', system-ui, sans-serif", hyper: "'Atkinson Hyperlegible', system-ui, sans-serif", system: 'system-ui, -apple-system, Segoe UI, sans-serif' }[getVal('font')] || 'serif';
   el.style.setProperty('--rfont', fam);
-  el.style.setProperty('--rs', settings.size + 'px');
-  el.style.setProperty('--rlh', String(settings.lh));
-  el.style.setProperty('--rw', settings.width + 'px');
-  el.style.setProperty('--rgap', String(settings.gap));
-  el.dataset.align = settings.align;
+  el.style.setProperty('--rs', getVal('size') + 'px');
+  el.style.setProperty('--rlh', String(getVal('lh')));
+  el.style.setProperty('--rw', getVal('width') + 'px');
+  el.style.setProperty('--rgap', String(getVal('gap')));
+  el.dataset.align = getVal('align');
 }
 
 function slider({ label, key, min, max, step, fmt, onInput }) {
-  const out = h('output', {}, fmt(settings[key]));
-  const input = h('input', { type: 'range', min, max, step, value: settings[key], 'aria-label': label,
-    oninput: (e) => { const v = +e.target.value; out.textContent = fmt(v); setSetting(key, v); onInput && onInput(v); paintTrack(); } });
+  const out = h('output', {}, fmt(getVal(key)));
+  const input = h('input', { type: 'range', min, max, step, value: getVal(key), 'aria-label': label,
+    oninput: (e) => { const v = +e.target.value; out.textContent = fmt(v); setVal(key, v); onInput && onInput(v); paintTrack(); } });
   const paintTrack = () => { const p = ((input.value - min) / (max - min)) * 100; input.style.setProperty('--p', p + '%'); };
   paintTrack();
   return h('div', { class: 'ap-row' }, h('label', {}, label), h('div', { class: 'ap-slide' }, input, out));
 }
 
-export function buildAppearance({ showTheme = true, showPreview = true } = {}) {
+export function buildAppearance(opts = {}) {
+  const { showTheme = true, showPreview = true, meta = null } = opts;
   const wrap = h('div', { class: 'appearance' });
+  if (meta) {
+    const on = !!meta.ap;
+    const sw = h('button', { class: 'switch' + (on ? ' on' : ''), role: 'switch', 'aria-checked': on, 'aria-label': 'Zapamiętaj ustawienia tylko dla tego dokumentu', onclick: () => {
+      setDocScope(meta, !on);
+      wrap.replaceWith(buildAppearance(opts));
+    } }, h('i'));
+    wrap.append(h('div', { class: 'ap-sec ap-scope' }, h('div', { class: 'ap-scope-t' }, h('b', {}, 'Tylko dla tego dokumentu'),
+      h('small', {}, on ? 'Zmiany dotyczą wyłącznie tego dokumentu; pozostałe zachowują ustawienia ogólne.' : 'Włącz, aby ten dokument miał własną czcionkę, rozmiar i motyw.')), sw));
+  }
 
   if (showTheme) {
     const themeRow = h('div', { class: 'ap-themes' });
-    const paint = () => { themeRow.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.k === settings.theme)); };
+    const paint = () => { themeRow.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.k === getVal('theme'))); };
     THEMES.forEach(([k, label, bg, fg]) => {
-      themeRow.append(h('button', { class: 'ap-theme', 'data-k': k, 'aria-label': label, onclick: () => { setSetting('theme', k); paint(); } },
+      themeRow.append(h('button', { class: 'ap-theme', 'data-k': k, 'aria-label': label, onclick: () => { setVal('theme', k); paint(); } },
         h('span', { class: 'sw', style: { background: bg, color: fg } }, h('b', {}, 'Aa')), h('small', {}, label)));
     });
     paint();
@@ -55,14 +65,14 @@ export function buildAppearance({ showTheme = true, showPreview = true } = {}) {
   }
 
   const fontRow = h('div', { class: 'ap-fonts' });
-  const paintF = () => fontRow.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.k === settings.font));
-  FONTS.forEach(([k, fam, label]) => fontRow.append(h('button', { class: 'ap-font', 'data-k': k, onclick: () => { setSetting('font', k); paintF(); } }, h('b', { style: { fontFamily: fam } }, 'Aa'), h('small', {}, label))));
+  const paintF = () => fontRow.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.k === getVal('font')));
+  FONTS.forEach(([k, fam, label]) => fontRow.append(h('button', { class: 'ap-font', 'data-k': k, onclick: () => { setVal('font', k); paintF(); } }, h('b', { style: { fontFamily: fam } }, 'Aa'), h('small', {}, label))));
   paintF();
 
   const alignRow = h('div', { class: 'seg' },
     ['left', 'Do lewej'].map ? null : null);
   const seg = h('div', { class: 'seg' });
-  [['left', 'Do lewej'], ['justify', 'Wyjustowany']].forEach(([k, l]) => seg.append(h('button', { class: settings.align === k ? 'on' : '', onclick: () => { setSetting('align', k); seg.querySelectorAll('button').forEach((b, i) => b.classList.toggle('on', ['left', 'justify'][i] === k)); } }, l)));
+  [['left', 'Do lewej'], ['justify', 'Wyjustowany']].forEach(([k, l]) => seg.append(h('button', { class: getVal('align') === k ? 'on' : '', onclick: () => { setVal('align', k); seg.querySelectorAll('button').forEach((b, i) => b.classList.toggle('on', ['left', 'justify'][i] === k)); } }, l)));
   void alignRow;
 
   wrap.append(

@@ -1,5 +1,8 @@
 // Własny zestaw ikon liniowych 24×24 (jedna grubość kreski, zaokrąglone zakończenia)
 const I = {
+  tag: '<path d="M3.8 12.2V4.8a1 1 0 0 1 1-1h7.4l8 8a1.4 1.4 0 0 1 0 2l-6.4 6.4a1.4 1.4 0 0 1-2 0z"/><circle cx="8.4" cy="8.4" r="1.4"/>',
+  link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3A4 4 0 0 0 13 5.3l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3A4 4 0 0 0 11 18.7l1-1"/>',
+  scale: '<path d="M12 4v16M6 20h12M5 8l7-2 7 2M5 8l-2.5 6a3 3 0 0 0 5 0zM19 8l-2.5 6a3 3 0 0 0 5 0z"/>',
   home: '<path d="M3.5 10.8 12 3.6l8.5 7.2V19a1.5 1.5 0 0 1-1.5 1.5h-4.2v-5.6H9.2v5.6H5A1.5 1.5 0 0 1 3.5 19z"/>',
   library: '<rect x="3.5" y="3.5" width="4.6" height="17" rx="1.3"/><rect x="9.7" y="3.5" width="4.6" height="17" rx="1.3"/><path d="m16.3 5.6 3.4-.9 3.4 14.6-3.4.9z" transform="translate(-1.1 0)"/>',
   chart: '<path d="M5.5 20V11.5M12 20V4M18.5 20v-6.5" stroke-width="2.4"/>',

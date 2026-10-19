@@ -358,3 +358,45 @@ kbd { min-width: 44px; text-align: center; padding: 4px 9px; border-radius: 9px;
 .bp-pg { color: var(--text-3); font-size: 11.5px; padding-top: 2px; font-variant-numeric: tabular-nums; }
 .ocr-ph { font-weight: 600; margin-bottom: 8px; }
 .ocr-dt { font-size: 13px; margin-top: 8px; }
+
+/* ── półki, tagi, wyszukiwarka globalna ── */
+.shelves { gap: 6px; }
+.shelves[hidden] { display: none; }
+.chip.sm { padding: 5px 12px; font-size: 12.5px; gap: 6px; }
+.chip.sm i { font-style: normal; opacity: .65; font-size: 11.5px; }
+.chip .ic { width: 14px; height: 14px; }
+.dc-tags { display: flex; gap: 5px; flex-wrap: nowrap; overflow: hidden; margin: 2px 0 4px; }
+.dc-tag { flex: 0 1 auto; min-width: 0; font-size: 11px; padding: 2px 8px; border-radius: 99px; background: var(--surface-2); color: var(--text-2); border: 1px solid var(--line); max-width: 11ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dc-tag.legal { flex: none; max-width: none; color: var(--accent); border-color: rgba(var(--accent-rgb), .45); }
+.tag-edit { display: grid; gap: 12px; }
+.tag-add { display: flex; gap: 8px; }
+.tag-add .field { flex: 1; min-width: 0; }
+.tag-edit .chip.tg .ic { width: 12px; height: 12px; margin-left: 2px; }
+.tag-edit .chips[hidden] { display: none; }
+.search-page .sr-info { margin: 0 0 18px; min-height: 20px; }
+.gs-results { display: grid; gap: 14px; }
+.gs-doc { padding: 16px 18px; display: grid; gap: 10px; }
+.gs-head { display: flex; gap: 12px; align-items: baseline; justify-content: space-between; }
+.gs-title { font-family: var(--font-display); font-weight: 600; font-size: 17px; overflow: hidden; text-overflow: ellipsis; }
+.gs-list { display: grid; gap: 6px; }
+.gs-hit { display: grid; gap: 2px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); line-height: 1.45; font-size: 14px; color: var(--text-2); }
+.gs-hit:hover { background: var(--surface-3, var(--surface-2)); color: var(--text); }
+.gs-hit small { color: var(--text-3); font-size: 11.5px; font-weight: 600; letter-spacing: .02em; }
+.gs-hit mark { background: rgba(var(--accent-rgb), .3); color: inherit; border-radius: 3px; padding: 0 1px; }
+.gs-more { justify-self: start; }
+.gs-more[hidden] { display: none; }
+.head-btns { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+@media (max-width: 560px) { .head-btns .btn:not(.head-add) { padding: 0 14px; } }
+.add-sheet { display: grid; gap: 16px; }
+.add-tabs { display: flex; }
+.add-tabs button { flex: 1; justify-content: center; }
+.add-pane { display: grid; gap: 14px; }
+.add-pane p { margin: 0; line-height: 1.5; }
+.paste-ta { min-height: 180px; resize: vertical; font-size: 14px; line-height: 1.5; }
+
+.page-head { flex-wrap: wrap; }
+@media (max-width: 560px) {
+  .head-btns { width: 100%; justify-content: stretch; flex-wrap: nowrap; }
+  .head-btns .btn { flex: 1; justify-content: center; white-space: nowrap; }
+  .head-btns #gs-link { flex: 0 0 auto; }
+}
