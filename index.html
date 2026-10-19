@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="pl" data-theme="night" data-accent="amber">
+<head>
+<meta charset="utf-8">
+<title>Lumen — czytnik i przewodnik po kursach</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Lumen to czytnik dokumentów, ebooków i kursów. Rozpoznaje rozdziały, pamięta miejsce, w którym skończyłeś, i prowadzi Cię przez cały kurs. Działa offline.">
+<meta name="theme-color" content="#080a18">
+<meta name="color-scheme" content="dark light">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Lumen">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="css/fonts.css">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/views.css">
+<link rel="stylesheet" href="css/reader.css">
+<script>
+// Ustaw motyw przed pierwszym rysowaniem, żeby uniknąć błysku
+try {
+  var s = JSON.parse(localStorage.getItem('lumen.settings') || '{}');
+  var t = s.theme || 'night';
+  if (t === 'auto') t = matchMedia('(prefers-color-scheme: dark)').matches ? 'night' : 'paper';
+  document.documentElement.dataset.theme = t;
+  document.documentElement.dataset.accent = s.accent || 'amber';
+  var bg = { night: '#080a18', oled: '#000000', paper: '#f4f0e8', sepia: '#efe2c6' }[t];
+  if (bg) document.querySelector('meta[name="theme-color"]').setAttribute('content', bg);
+} catch (e) {}
+</script>
+</head>
+<body>
+<div id="app"></div>
+<noscript><p style="padding:2rem;font-family:sans-serif">Lumen wymaga włączonego JavaScriptu.</p></noscript>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

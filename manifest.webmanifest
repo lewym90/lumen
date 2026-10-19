@@ -1,0 +1,49 @@
+{
+  "id": "./",
+  "name": "Lumen — czytnik i przewodnik po kursach",
+  "short_name": "Lumen",
+  "description": "Czytnik dokumentów, ebooków i kursów, który pamięta, gdzie skończyłeś, i prowadzi Cię rozdział po rozdziale.",
+  "lang": "pl",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
+  "orientation": "any",
+  "background_color": "#080a18",
+  "theme_color": "#080a18",
+  "categories": ["books", "education", "productivity"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "shortcuts": [
+    { "name": "Biblioteka", "url": "./#/library", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Postępy", "url": "./#/stats", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
+  ],
+  "share_target": {
+    "action": "./share-target",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "files": [
+        { "name": "files", "accept": ["application/pdf", "application/epub+zip", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "text/plain", "text/markdown", "text/html", ".pdf", ".epub", ".docx", ".txt", ".md", ".html"] }
+      ]
+    }
+  },
+  "file_handlers": [
+    {
+      "action": "./",
+      "accept": {
+        "application/pdf": [".pdf"],
+        "application/epub+zip": [".epub"],
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
+        "text/plain": [".txt"],
+        "text/markdown": [".md"],
+        "text/html": [".html", ".htm"]
+      }
+    }
+  ]
+}
