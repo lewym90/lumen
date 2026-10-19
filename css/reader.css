@@ -21,7 +21,7 @@ body.reading .nav { visibility: hidden; }
 .reader.chrome-off .r-bottom { transform: translateY(101%); }
 .reader.focus .r-top, .reader.focus .r-bottom { opacity: 0; pointer-events: none; }
 /* tryb skupienia: równe, bezpieczne marginesy góra/dół + miękkie zanikanie krawędzi */
-.reader.focus .r-scroll { top: calc(var(--sat) + 14px); bottom: 0; padding-top: 10px; padding-bottom: calc(18vh + var(--sab)); scroll-padding-top: 24px; -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 18px, #000 calc(100% - 14px), transparent 100%); mask-image: linear-gradient(to bottom, transparent 0, #000 18px, #000 calc(100% - 14px), transparent 100%); }
+.reader.focus .r-scroll { top: calc(var(--sat) + 14px); bottom: 0; padding-top: 10px; padding-bottom: calc(18vh + var(--sab)); scroll-padding-top: 24px; -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 18px, #000 calc(100% - 7px), transparent 100%); mask-image: linear-gradient(to bottom, transparent 0, #000 18px, #000 calc(100% - 7px), transparent 100%); }
 .reader.focus .hd { scroll-margin-top: 24px; }
 .focus-exit { position: absolute; z-index: 40; top: calc(var(--sat) + 2px); left: 50%; transform: translateX(-50%); min-width: 88px; height: 26px; padding: 0 14px; display: flex; align-items: center; justify-content: center; border-radius: 14px; color: var(--read-fg-2); transition: background .25s, box-shadow .25s, min-width .3s var(--ease), height .3s var(--ease); -webkit-tap-highlight-color: transparent; }
 .focus-exit .fe-bar { display: block; width: 36px; height: 4px; border-radius: 4px; background: currentColor; opacity: .35; }
