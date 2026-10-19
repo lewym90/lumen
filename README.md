@@ -29,6 +29,7 @@ Dodając nowy plik do aplikacji, dopisz go do listy `PRECACHE` w `sw.js`.
 - Edytor podziału: zmiana nazwy/numeru, dzielenie w dowolnym miejscu (też z czytnika), przesuwanie początku, scalanie, powrót do podziału automatycznego.
 - Czytanie na głos: rozwijanie skrótów (art., ust., Dz. U.), zapowiedzi „Artykuł 5, ustęp 2”, wybór głosu i tempa, minutnik, kolejne rozdziały, sterowanie z ekranu blokady.
 - Własne etykiety zakreśleń (np. „Do sprawdzenia”, „Ważne”): filtr i grupowanie w panelu notatek, eksport według rozdziałów lub etykiet do Markdown i Worda (.doc).
+- Własne zaznaczanie tekstu na telefonie/tablecie (przytrzymanie słowa, uchwyty z lupą, autoprzewijanie) zamiast systemowego paska; do wyłączenia w Ustawieniach.
 - Tagi i półki dokumentów, filtr w bibliotece oraz wyszukiwanie w treści wszystkich dokumentów naraz (`#/search`).
 - Ustawienia wyglądu (motyw, krój, rozmiar…) można zapamiętać osobno dla wybranego dokumentu.
 - Akty prawne z każdego źródła wyglądają tak samo: PDF (także dwukolumnowy), HTML, DOCX, TXT i wklejony tekst dostają strukturę art./ust./pkt/lit. bez zmiany treści.

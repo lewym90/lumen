@@ -364,3 +364,26 @@ mark.hit.cur { background: var(--accent); color: var(--accent-ink); box-shadow: 
 .ap-scope { display: flex; align-items: center; gap: 14px; justify-content: space-between; padding: 12px 14px; border-radius: 16px; background: var(--surface-2); border: 1px solid var(--line); }
 .ap-scope-t { display: grid; gap: 2px; min-width: 0; }
 .ap-scope-t small { color: var(--text-3); font-size: 12.5px; line-height: 1.4; }
+
+/* ── własne zaznaczanie (ekrany dotykowe) ── */
+.r-text { position: relative; }
+@media (pointer: coarse) {
+  .r-text.own-sel, .r-text.own-sel * { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+}
+.cs-layer { position: absolute; inset: 0; pointer-events: none; z-index: 4; }
+.cs-rects { position: absolute; inset: 0; opacity: .30; }
+.cs-rect { position: absolute; background: var(--accent); border-radius: 3px; }
+.cs-handle { position: absolute; width: 48px; margin-left: -24px; pointer-events: auto; touch-action: none; cursor: grab; }
+.cs-handle[hidden] { display: none; }
+.cs-handle .stem { position: absolute; left: 50%; margin-left: -1px; width: 2px; top: 0; bottom: 0; background: var(--accent); border-radius: 2px; }
+.cs-handle .knob { position: absolute; left: 50%; margin-left: -9px; width: 18px; height: 18px; border-radius: 50%; background: var(--accent); box-shadow: 0 2px 8px rgba(0, 0, 0, .5), 0 0 0 3px rgba(var(--accent-rgb), .25); }
+.cs-handle.start .knob { top: -2px; }
+.cs-handle.end .knob { bottom: -2px; }
+.cs-loupe { position: fixed; z-index: 90; pointer-events: none; padding: 12px 14px; border-radius: 18px; background: var(--glass-strong); border: 1px solid var(--line-2); box-shadow: 0 20px 50px -10px rgba(0, 0, 0, .7); backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px); width: min(340px, calc(100vw - 16px)); color: var(--text); font-family: var(--rfont, var(--font-read)); font-size: 25px; line-height: 1.3; animation: selIn .18s var(--spring) both; }
+.cs-loupe[hidden] { display: none; }
+.cs-lp-line { display: flex; align-items: center; }
+.cs-lp-line .half { flex: 1 1 0; min-width: 0; display: flex; overflow: hidden; }
+.cs-lp-line .half.before { justify-content: flex-end; }
+.cs-lp-line .half > span { white-space: pre; }
+.cs-lp-line mark { background: rgba(var(--accent-rgb), .35); color: inherit; border-radius: 3px; }
+.cs-caret { flex: none; width: 2px; height: 1.25em; background: var(--accent); border-radius: 2px; margin: 0 1px; }

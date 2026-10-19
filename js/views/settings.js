@@ -26,6 +26,10 @@ export async function mount(root) {
   const paint = () => goalIn.style.setProperty('--p', ((goalIn.value - 5) / 175) * 100 + '%');
   paint();
 
+  const ownToggle = h('button', { class: 'switch' + (settings.ownSel !== false ? ' on' : ''), role: 'switch', 'aria-checked': settings.ownSel !== false, 'aria-label': 'Własne zaznaczanie tekstu', onclick: (e) => {
+    const on = !(settings.ownSel !== false);
+    setSetting('ownSel', on); e.currentTarget.classList.toggle('on', on); e.currentTarget.setAttribute('aria-checked', String(on));
+  } }, h('i'));
   const motionToggle = h('button', { class: 'switch' + (settings.motion === 'reduce' ? ' on' : ''), role: 'switch', 'aria-checked': settings.motion === 'reduce', onclick: (e) => {
     const on = settings.motion !== 'reduce';
     setSetting('motion', on ? 'reduce' : 'auto');
@@ -58,7 +62,9 @@ export async function mount(root) {
       h('div', { class: 'set-grid' },
         h('div', { class: 'set-col' },
           section('Wygląd i czytanie', 'sparkle', buildAppearance({ showTheme: true, showPreview: true }),
-            h('div', { class: 'ap-row sw-row' }, h('label', {}, 'Ogranicz animacje'), motionToggle)),
+            h('div', { class: 'ap-row sw-row' }, h('label', {}, 'Ogranicz animacje'), motionToggle),
+            h('div', { class: 'ap-row sw-row' }, h('label', {}, 'Własne zaznaczanie tekstu (telefon, tablet)'), ownToggle),
+            h('p', { class: 'dim sm' }, 'Przytrzymaj słowo, aby je zaznaczyć; uchwyty z lupą pozwalają dokładnie wskazać początek i koniec. Zamiast systemowego paska „Kopiuj / Sprawdź / Tłumacz” pojawia się pasek Lumen z kolorami, notatką i kopiowaniem.')),
         ),
         h('div', { class: 'set-col' },
           section('Cel dzienny', 'target', h('p', { class: 'muted' }, 'Ile minut dziennie chcesz czytać? Pierścień na pulpicie zapełnia się, gdy go osiągniesz.'),

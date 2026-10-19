@@ -10,6 +10,7 @@ import { chapterBodyHtml, openerHtml, textHtml, blockHtml } from './render.js';
 import { openPageViewer, openFigureZoom, observeScanPages, observeFigures, releasePdf } from './pageview.js';
 import { Narrator, ttsSupported, loadVoices, pickVoice } from './tts.js';
 
+import { initOwnSelection } from './selection.js';
 import { HL_COLORS, hlLabel, editLabels, buildExport, saveExport } from './labels.js';
 let R = null;
 
@@ -155,6 +156,9 @@ function buildDom() {
   const onScroll = throttleRaf(handleScroll);
   R.scroll.addEventListener('scroll', onScroll, { passive: true });
   R.text.addEventListener('click', onTextClick);
+  R.own = initOwnSelection(R, { enabled: ownEnabled, onShow: (src) => showSelBar(src, true), onHide: hideSelBar });
+  R.text.classList.toggle('own-sel', ownEnabled());
+  { const own = R.own; R.cleanups.push(() => own.destroy()); }
   R.scroll.addEventListener('pointerdown', () => { R.lastAct = Date.now(); }, { passive: true });
   document.addEventListener('keydown', onKey);
   document.addEventListener('selectionchange', onSelChange);
@@ -162,7 +166,9 @@ function buildDom() {
   window.addEventListener('pagehide', saveSync);
   const onSettings = (k) => {
     if (!R) return;
+    if (k === 'ownSel') { R.own?.clear(); R.text.classList.toggle('own-sel', ownEnabled()); }
     if (['font', 'size', 'lh', 'width', 'gap', 'align', 'ap'].includes(k)) {
+      R.own?.clear();
       const p = currentPos();
       applyReadingVars(R.root);
       requestAnimationFrame(() => restorePos(p));
@@ -175,12 +181,14 @@ function buildDom() {
   R.cleanups.push(() => window.removeEventListener('resize', onResize));
 }
 
-function onResize() { if (R) updateDocking(); }
+function onResize() { if (R) { updateDocking(); R.own?.redraw(); } }
+const ownEnabled = () => settings.ownSel !== false && matchMedia('(pointer: coarse)').matches;
 function updateDocking() { /* układ obsługuje CSS */ }
 
 // ───────────── rozdział ─────────────
 async function renderChapter(ci, pos = null, { first = false } = {}) {
   if (!R) return;
+  R.own?.clear();
   const { doc, meta } = R;
   ci = clamp(ci, 0, doc.chapters.length - 1);
   stopListen();
@@ -516,6 +524,7 @@ async function loadImages() {
 // ───────────── zdarzenia tekstu ─────────────
 function onTextClick(e) {
   const t = e.target;
+  if (R.own?.active()) { R.own.clear(); return; }
   const act = t.closest('[data-act]');
   if (act) {
     const a = act.dataset.act;
@@ -547,6 +556,7 @@ function onKey(e) {
   if (!R) return;
   const tag = (e.target.tagName || '').toLowerCase();
   if (tag === 'input' || tag === 'textarea' || e.target.isContentEditable) { if (e.key === 'Escape') { e.target.blur(); } return; }
+  if (e.key === 'Escape' && R.own?.active()) { R.own.clear(); return; }
   if (e.ctrlKey || e.metaKey || e.altKey) { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') { e.preventDefault(); togglePanel('search', true); } return; }
   if (document.querySelector('.scrim')) return;
   switch (e.key) {
@@ -577,6 +587,7 @@ function toggleFocus() {
 // ───────────── panele ─────────────
 function togglePanel(name, focusInput = false) {
   if (!R) return;
+  R.own?.clear();
   const was = R.panel;
   R.panel = was === name ? null : name;
   R.root.classList.toggle('p-toc', R.panel === 'toc');
@@ -873,6 +884,7 @@ function offsetWithin(root, node, off) {
 function textRoot(el) { return el.matches('[data-t]') ? el : el.querySelector('[data-t]'); }
 
 function selectionPieces() {
+  if (R.own?.active()) return R.own.pieces();
   const sel = getSelection();
   if (!sel || sel.isCollapsed || !sel.rangeCount) return [];
   const range = sel.getRangeAt(0);
@@ -906,6 +918,7 @@ async function addHighlights(color, withNote = false) {
   if (!created.length) return;
   for (const m of created) { R.marks.push(m); await db.put('marks', m); }
   getSelection().removeAllRanges();
+  R.own?.clear();
   hideSelBar();
   rerenderBlocks(created.map((m) => m.b));
   if (withNote) openHighlight(created[0].id);
@@ -970,6 +983,7 @@ async function toggleBookmark() {
 // pasek zaznaczenia
 let selTimer = null;
 function onSelChange() {
+  if (R?.own?.active()) return;
   clearTimeout(selTimer);
   selTimer = setTimeout(() => {
     if (!R) return;
@@ -981,22 +995,22 @@ function onSelChange() {
 
 function hideSelBar() { if (R) R.selBar.hidden = true; }
 
-function showSelBar(range) {
+function showSelBar(range, own = false) {
   const bar = R.selBar;
   const prev = (e) => e.preventDefault();
   bar.replaceChildren(
     ...Array.from({ length: HL_COLORS }, (_, i) => h('button', { class: 'hl-dot c' + i, 'aria-label': 'Zakreśl: ' + hlLabel(i), title: hlLabel(i), onpointerdown: prev, onclick: () => addHighlights(i) })),
     h('span', { class: 'sb-sep' }),
     h('button', { class: 'icon-btn sm', 'aria-label': 'Dodaj notatkę', title: 'Notatka', onpointerdown: prev, onclick: () => addHighlights(0, true), html: ic('note') }),
-    h('button', { class: 'icon-btn sm', 'aria-label': 'Kopiuj', title: 'Kopiuj', onpointerdown: prev, onclick: async () => { try { await navigator.clipboard.writeText(getSelection().toString()); toast('Skopiowano', { icon: 'copy', ms: 1400 }); } catch { /* brak */ } }, html: ic('copy') }));
+    h('button', { class: 'icon-btn sm', 'aria-label': 'Kopiuj', title: 'Kopiuj', onpointerdown: prev, onclick: async () => { try { await navigator.clipboard.writeText(own && R.own?.active() ? R.own.text() : getSelection().toString()); toast('Skopiowano', { icon: 'copy', ms: 1400 }); } catch { /* brak */ } }, html: ic('copy') }));
   bar.hidden = false;
   const rect = range.getBoundingClientRect();
   const bw = bar.offsetWidth, bh = bar.offsetHeight;
   let x = rect.left + rect.width / 2 - bw / 2;
   x = clamp(x, 10, innerWidth - bw - 10);
   const touch = matchMedia('(hover: none)').matches;
-  let y = touch ? rect.bottom + 14 : rect.top - bh - 10;
-  if (y < 70) y = rect.bottom + 12;
+  let y = own ? rect.top - bh - 34 : touch ? rect.bottom + 14 : rect.top - bh - 10;
+  if (y < 70) y = rect.bottom + (own ? 58 : 12);
   if (y + bh > innerHeight - 10) y = Math.max(70, rect.top - bh - 12);
   bar.style.left = x + 'px';
   bar.style.top = y + 'px';

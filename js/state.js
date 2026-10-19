@@ -15,7 +15,7 @@ const DEFAULTS = {
   font: 'serif', size: 19, lh: 1.72, width: 680, align: 'left', gap: 1,
   goalMin: 30, deadlineMode: true,
   ttsRate: 1, ttsNext: false, ttsVoice: '',
-  motion: 'auto',
+  motion: 'auto', ownSel: true,
   hlLabels: ['Ważne', 'Do sprawdzenia', 'Definicja', 'Przykład', 'Pytanie'],
 };
 export const settings = (() => {
