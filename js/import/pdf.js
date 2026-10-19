@@ -200,7 +200,7 @@ function extractLines(items, fonts, W, H) {
       const gap = prevEnd == null ? 0 : it.x - prevEnd;
       const gapLimit = Math.max(1.25 * dsize, 11);
       if (!seg || (!ws && gap > gapLimit)) {
-        seg = { x0: it.x, x1: it.x + it.w, runs: [], chars: 0, bold: 0, mono: 0 };
+        seg = { x0: it.x, x1: it.x + it.w, runs: [], chars: 0, bold: 0, mono: 0, szw: new Map() };
         segs.push(seg);
         prevItem = null;
       }
@@ -220,6 +220,7 @@ function extractLines(items, fonts, W, H) {
       if (last && last.st.join() === styles.join()) last.t += str; else seg.runs.push({ t: str, st: styles });
       const n = str.trim().length;
       seg.chars += n;
+      { const k = r05(it.size); seg.szw.set(k, (seg.szw.get(k) || 0) + n); }
       if (it.f.heavy || it.f.bold) seg.bold += n;
       if (it.f.mono) seg.mono += n;
       seg.x1 = Math.max(seg.x1, it.x + it.w);
@@ -230,6 +231,9 @@ function extractLines(items, fonts, W, H) {
       sg.text = sg.runs.map((r) => r.t).join('');
       sg.isBold = sg.chars > 0 && sg.bold / sg.chars >= 0.88;
       sg.isMono = sg.chars > 0 && sg.mono / sg.chars >= 0.88;
+      let bk = 0, bs = dsize;
+      for (const [k, v] of sg.szw) if (v > bk) { bk = v; bs = k; }
+      sg.size = bs; delete sg.szw;
     }
     const clean = segs.filter((s) => s.text.trim());
     if (!clean.length) continue;

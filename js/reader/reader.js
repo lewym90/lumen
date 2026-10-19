@@ -612,17 +612,17 @@ function buildToc() {
   const list = h('div', { class: 'toc-list' });
   let jump = null;
   if (doc.blocks.some((b) => b.art)) {
-    const input = h('input', { type: 'text', inputmode: 'text', autocomplete: 'off', placeholder: 'np. 28a', 'aria-label': 'Numer artykułu' });
+    const input = h('input', { type: 'text', inputmode: 'text', autocomplete: 'off', placeholder: 'np. 28a', 'aria-label': doc.blocks.some((b) => b.sg) ? 'Numer paragrafu' : 'Numer artykułu' });
     jump = h('form', { class: 'art-jump', onsubmit: (e) => {
       e.preventDefault();
-      const v = input.value.trim().toLowerCase().replace(/^art\.?\s*/, '').replace(/\.$/, '');
+      const v = input.value.trim().toLowerCase().replace(/^(?:art\.?|§)\s*/, '').replace(/\.$/, '');
       const num = parseInt(v, 10);
       let bi = doc.blocks.findIndex((b) => b.art && (b.art.toLowerCase() === v || b.art.split('–')[0].toLowerCase() === v));
       if (bi < 0 && /^\d+$/.test(v)) bi = doc.blocks.findIndex((b) => { if (!b.art || !b.art.includes('–')) return false; const [a, z] = b.art.split('–').map((x) => parseInt(x, 10)); return num >= a && num <= z; });
       if (bi < 0) { input.classList.add('bad'); setTimeout(() => input.classList.remove('bad'), 700); return; }
       if (innerWidth < 1100) togglePanel(null);
       location.hash = `#/read/${meta.id}?b=${bi}`;
-    } }, h('span', {}, 'Art.'), input, h('button', { class: 'btn sm', type: 'submit' }, 'Idź'));
+    } }, h('span', {}, doc.blocks.some((b) => b.sg) ? '§' : 'Art.'), input, h('button', { class: 'btn sm', type: 'submit' }, 'Idź'));
   }
   const splitBtn = h('button', { class: 'btn sm ghost toc-split', onclick: splitHere }, h('span', { html: ic('scissors') }), 'Podziel rozdział tutaj');
   let lastPart = null;
@@ -1033,7 +1033,7 @@ function isSpeakable(i) {
 function spokenLabel(i) {
   const b = R.doc.blocks[i];
   if (!b) return '';
-  if (b.art || b.u) return [b.art ? `Artykuł ${b.art.replace('–', ' do ')}.` : '', b.u ? `Ustęp ${b.u.replace(/\.$/, '')}.` : ''].filter(Boolean).join(' ');
+  if (b.art || b.u) return [b.art ? `${b.sg ? 'Paragraf' : 'Artykuł'} ${b.art.replace('–', ' do ')}.` : '', b.u ? `Ustęp ${b.u.replace(/^[\[<]/, '').replace(/^§\s*/, '').replace(/\.$/, '')}.` : ''].filter(Boolean).join(' ');
   if (b.t === 'li' && b.o) {
     const m = b.o.match(/^(\d+[a-z]{0,3})\)$/);
     if (m) return `Punkt ${m[1]}.`;

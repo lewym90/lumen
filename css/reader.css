@@ -67,6 +67,7 @@ body.reading .nav { visibility: hidden; }
 .r-text p.lg-p [data-t] { text-indent: 0; }
 .r-text p.wc { margin-left: .15em; }
 .r-text p.ctr { text-align: center; text-wrap: balance; }
+.r-text p.ra { text-align: right; text-wrap: balance; margin-top: 1.2em; }
 .r-text p.ttl-k { font-family: var(--font-display); font-size: 1.05em; letter-spacing: .32em; text-transform: uppercase; color: var(--accent); font-weight: 650; margin: 1.2em 0 .5em; }
 .r-text p.ttl-d { color: var(--read-fg-2); margin: 0 0 .9em; }
 .r-text p.ttl-t { font-family: var(--font-display); font-size: 1.55em; line-height: 1.25; font-weight: 600; letter-spacing: -.01em; margin: 0 0 1em; }

@@ -79,10 +79,10 @@ export function blockHtml(b, i, ctx) {
       return `<div class="pgimg" data-b="${i}" data-pg="${b.pg}"><canvas></canvas><span class="pgn">${b.pg}</span></div>`;
     default: {
       if (b.art || b.u) {
-        const lab = `${b.art ? `<b class="lg-an">Art.&nbsp;${esc(b.art)}.</b>` : ''}${b.u ? `<span class="lg-u">${esc(b.u)}</span>` : ''}`;
+        const lab = `${b.art ? `<b class="lg-an">${b.ob ? esc(b.ob) : ''}${b.sg ? esc(b.sg) : 'Art.'}&nbsp;${esc(b.art)}.</b>` : ''}${b.u ? `<span class="lg-u">${esc(b.u)}</span>` : ''}`;
         return `<p class="lg-p${b.art ? ' lg-art' : ''}${bm}" data-b="${i}"><span class="lg-lab" aria-hidden="true">${lab}</span><span data-t>${txt()}</span></p>`;
       }
-      const cls = [b.ctr ? 'ctr' + (b.ttl ? ' ttl-' + b.ttl : '') : '', b.wc ? 'wc' : '', b.fn ? 'fn' : '', b.note ? 'note' : '', b.ld ? 'ld' : '', b.sm ? 'sm' : '', b.cap ? 'cap' : '', bm.trim()].filter(Boolean).join(' ');
+      const cls = [b.ra ? 'ra' : '', b.ctr ? 'ctr' + (b.ttl ? ' ttl-' + b.ttl : '') : '', b.wc ? 'wc' : '', b.fn ? 'fn' : '', b.note ? 'note' : '', b.ld ? 'ld' : '', b.sm ? 'sm' : '', b.cap ? 'cap' : '', bm.trim()].filter(Boolean).join(' ');
       const btn = b.cap && ctx.hasPdf && b.pg ? `<button class="cap-btn" data-act="page" data-pg="${b.pg}" aria-label="Zobacz oryginalną stronę ${b.pg}" title="Zobacz oryginał, str. ${b.pg}">${ic('eye')}</button>` : '';
       return `<p class="${cls}" data-b="${i}" data-t>${txt()}</p>${btn}`;
     }

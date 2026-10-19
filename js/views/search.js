@@ -87,7 +87,7 @@ export async function mount(root, params = {}) {
         const a = Math.max(0, hit.s - 50), z = Math.min(text.length, hit.e + 90);
         const snippet = (a > 0 ? '…' : '') + esc(text.slice(a, hit.s)) + '<mark>' + esc(text.slice(hit.s, hit.e)) + '</mark>' + esc(text.slice(hit.e, z)) + (z < text.length ? '…' : '');
         const ci = chapterOfBlock(e.doc, hit.b);
-        const where = (b.art ? `Art. ${b.art}${b.u ? ' ust. ' + b.u.replace(/\.$/, '') : ''} · ` : '') + (e.doc.chapters[ci]?.title || '');
+        const where = (b.art ? `${b.sg || 'Art.'} ${b.art}${b.u ? ' ust. ' + b.u.replace(/\.$/, '') : ''} · ` : '') + (e.doc.chapters[ci]?.title || '');
         list.append(h('a', { class: 'gs-hit', href: `#/read/${meta.id}?b=${hit.b}&q=${encodeURIComponent(raw)}` }, h('small', {}, where), h('span', { html: snippet })));
       }
       more.hidden = shown >= hits.length;

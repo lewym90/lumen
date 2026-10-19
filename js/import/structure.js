@@ -3,12 +3,12 @@ import { countWords, normKey } from '../util.js';
 
 const KW = 'rozdział|rozdzial|chapter|lekcja|lesson|moduł|modul|module|unit|temat|lekcje|część|czesc|part|księga|ksiega|book|dział|dzial|section|tom|volume|etap|sesja|day|dzień';
 const PART_KW = /^(część|czesc|part|księga|ksiega|book|tom|volume|dział|dzial)$/i;
-const LABEL_RE = new RegExp(`^(${KW})\\s+([IVXLCDM]+|\\d+(?:\\.\\d+)*|[A-Z])\\b[\\s.:–—-]*(.*)$`, 'i');
+const LABEL_RE = new RegExp(`^([\\[<]?)(${KW})\\s+([IVXLCDM]+[a-z]{0,2}|\\d+[a-z]{0,3}(?:\\.\\d+)*|[A-Z])\\b[\\s.:–—-]*(.*)$`, 'i');
 const NUM_RE = /^(\d{1,3}(?:\.\d{1,3}){0,3})[.)]?\s+(\S.*)$/;
 
 export function isPartTitle(t) {
   const m = t.trim().match(LABEL_RE);
-  return !!(m && PART_KW.test(m[1]));
+  return !!(m && PART_KW.test(m[2]));
 }
 
 // "3 Etyka i standardy" -> {num:'3', kw:'', title:'Etyka i standardy'}
@@ -16,8 +16,8 @@ export function parseLabel(raw) {
   const t = raw.replace(/\s+/g, ' ').trim();
   let m = t.match(LABEL_RE);
   if (m) {
-    const kw = m[1][0].toUpperCase() + m[1].slice(1).toLowerCase();
-    return { kw, num: m[2], title: m[3] || '' };
+    const kw = m[1] + m[2][0].toUpperCase() + m[2].slice(1).toLowerCase();
+    return { kw, num: m[3], title: m[4] || '' };
   }
   m = t.match(NUM_RE);
   if (m && !m[1].includes('.') ) return { kw: '', num: m[1], title: m[2] };

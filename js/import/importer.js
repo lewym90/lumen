@@ -62,7 +62,7 @@ async function shrinkImage(blob, maxW = 420) {
   } catch { return blob; }
 }
 
-export const PARSER_V = 3; // zwiększ, gdy zmienia się sposób rozpoznawania struktury
+export const PARSER_V = 4; // zwiększ, gdy zmienia się sposób rozpoznawania struktury
 
 async function parseByType(file, type, report) {
   let parsed;
@@ -91,7 +91,7 @@ async function parseByType(file, type, report) {
   } else {
     const { parsePlainText } = await import('./text.js');
     const txt = await readText(file);
-    const legalLike = (txt.match(/^\s*Art\.\s*\d+[a-z]{0,3}\.\s/gm) || []).length >= 15;
+    const legalLike = (txt.match(/^\s*(?:Art\.|§)\s*\d+[a-z]{0,3}\.\s/gm) || []).length >= 6;
     const r = parsePlainText(txt, { lines: legalLike });
     parsed = { meta: { title: r.title, author: '' }, blocks: r.blocks, entries: [], assets: [] };
   }

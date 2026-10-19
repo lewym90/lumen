@@ -2,18 +2,27 @@
 // rozpoznaje artykuły, ustępy, punkty i litery w gotowych blokach tekstu i nadaje im tę samą strukturę co w PDF-ie.
 // Treść nie jest zmieniana — z początku bloku zdejmowany jest tylko numer (np. „Art. 5.”, „2.”, „3)”),
 // który trafia do osobnego pola i jest wyświetlany w tym samym miejscu.
-import { ART_RE, HEAD_RE, UST_RE, PKT_RE, LIT_RE, DASH_RE, DZU_RE, legalEntries, cap } from './legal.js';
+import { ART_RE, PAR_RE, KIND_RE, HEAD_RE, UST_RE, PKT_RE, LIT_RE, DASH_RE, DZU_RE, legalEntries, cap } from './legal.js';
 
 const plain = (b) => (b.t === 'p' || b.t === 'li' || b.t === 'quote' || b.t === 'h') && typeof b.x === 'string';
 
+// który znak jednostki (Art. / §) dominuje w blokach
+function unitSym(blocks) {
+  let a = 0, p = 0;
+  for (const b of blocks) { if (!plain(b)) continue; const t = b.x.trim(); if (ART_RE.test(t)) a++; else if (PAR_RE.test(t)) p++; }
+  return p > a ? '§' : 'Art.';
+}
+
 export function detectLegalBlocks(blocks) {
+  const RE = unitSym(blocks) === '§' ? PAR_RE : ART_RE;
   let arts = 0, prev = 0, ordered = 0;
   for (const b of blocks) {
     if (!plain(b)) continue;
-    const m = b.x.trim().match(ART_RE);
-    if (m) { arts++; const n = parseInt(m[1], 10); if (n >= prev && n <= prev + 3) ordered++; prev = n; }
+    const m = b.x.trim().match(RE);
+    if (m) { arts++; const n = parseInt(m[1], 10); if (n >= prev && n <= prev + 4) ordered++; prev = n; }
   }
-  return arts >= 15 && arts / Math.max(1, blocks.length) >= 0.02 && ordered / arts >= 0.8;
+  if (arts >= 15 && arts / Math.max(1, blocks.length) >= 0.02 && ordered / arts >= 0.8) return true;
+  return arts >= 6 && arts / Math.max(1, blocks.length) >= 0.05 && ordered / arts >= 0.85;
 }
 
 // zdejmuje n znaków z początku tekstu bloku, przesuwając znaczniki formatowania
@@ -43,9 +52,12 @@ function unlist(b) {
 
 export function legalizeBlocks(input) {
   const src = input.filter((b) => b.t !== 'page').map(unlist);
+  const sym = unitSym(src);
+  const UNIT_RE = sym === '§' ? PAR_RE : ART_RE;
   const out = [];
   const headings = [];
   const front = { kind: '', date: '', subject: [], ref: '', note: '' };
+  const pre = [];   // baner przed tytułem („DZIENNIK USTAW …”)
   let inFront = true, lastUst = 0, cur = null, wantBody = false;
 
   const push = (b) => { out.push(b); return b; };
@@ -59,10 +71,11 @@ export function legalizeBlocks(input) {
     if (inFront) {
       const u = text.replace(/\s/g, '');
       if (DZU_RE.test(text) && !front.ref) { front.ref = text; continue; }
-      if (/^(USTAWA|ROZPORZĄDZENIE|KODEKS|DEKRET|OBWIESZCZENIE|UCHWAŁA|KONSTYTUCJA)$/i.test(u) && !front.kind) { front.kind = cap(u); continue; }
+      if (KIND_RE.test(u) && !front.kind) { front.kind = cap(u); continue; }
       if (/^z dnia\s/i.test(text) && !front.date && front.kind) { front.date = text; continue; }
       if (/^Opracowano na podstawie/i.test(text) && front.kind) { front.note = text; continue; }
-      if (front.kind && !HEAD_RE.test(text) && !ART_RE.test(text) && front.subject.length < 3) { front.subject.push(text); continue; }
+      if (front.kind && !HEAD_RE.test(text) && !ART_RE.test(text) && !PAR_RE.test(text) && !/^\d{1,3}[.)]\s/.test(text) && text.length < 220 && front.subject.length < 3) { front.subject.push(text); continue; }
+      if (!front.kind && i < 14 && b.t !== 'h' && !HEAD_RE.test(text) && !ART_RE.test(text) && !PAR_RE.test(text) && text.length < 90 && src.slice(i, 14).some((n) => plain(n) && KIND_RE.test(n.x.replace(/\s/g, '')))) { pre.push(b); continue; }
     }
 
     const hm = text.match(HEAD_RE);
@@ -74,12 +87,12 @@ export function legalizeBlocks(input) {
       while (j < src.length && ttl.length < 2) {
         const n = src[j];
         const nt = plain(n) ? n.x.replace(/\s+/g, ' ').trim() : '';
-        if (!nt || HEAD_RE.test(nt) || ART_RE.test(nt) || nt.length > 160 || /[.;:]$/.test(nt) && nt.length > 90) break;
+        if (!nt || HEAD_RE.test(nt) || ART_RE.test(nt) || PAR_RE.test(nt) || nt.length > 160 || /[.;:]$/.test(nt) && nt.length > 90) break;
         if (n.t === 'h' || n.t === 'p') { ttl.push(nt); j++; } else break;
         if (n.t === 'h') break;
       }
       i = j - 1;
-      const hn = `${cap(hm[1])} ${hm[2]}`;
+      const hn = `${cap(hm[1])} ${/\snr\s/i.test(text) ? 'nr ' : ''}${hm[2]}`;
       const ht = ttl.join(' ');
       push({ t: 'h', x: [hn, ht].filter(Boolean).join(' '), l: 1, hk: hm[1].toLowerCase(), hn, ht, ...(b.pg ? { pg: b.pg } : {}) });
       headings.push({ block: out.length - 1, kind: hm[1].toLowerCase(), text: out[out.length - 1].x });
@@ -90,11 +103,11 @@ export function legalizeBlocks(input) {
     if (b.t === 'h') { wantBody = false; push({ ...b }); continue; }
 
     const raw = b.x.replace(/^\s+/, '');
-    const am = raw.match(ART_RE);
+    const am = raw.match(UNIT_RE);
     if (am) {
       const label = am[2] ? `${am[1]}–${am[2]}` : am[1];
       let nb = strip(b, am[0].length);
-      const art = { ...nb, t: 'p', art: label };
+      const art = { ...nb, t: 'p', art: label, ...(sym === '§' ? { sg: '§' } : {}) };
       delete art.o; delete art.d;
       lastUst = 0;
       const um1 = nb.x.match(UST_RE);
@@ -140,15 +153,16 @@ export function legalizeBlocks(input) {
 
   // blok tytułowy
   const frontBlocks = [];
-  const kindTxt = front.kind || 'Akt prawny';
+  const kindTxt = front.kind;
   const subject = front.subject.join(' ');
-  frontBlocks.push({ t: 'p', x: kindTxt, ctr: 1, ttl: 'k' });
+  if (kindTxt) frontBlocks.push({ t: 'p', x: kindTxt, ctr: 1, ttl: 'k' });
   if (front.date) frontBlocks.push({ t: 'p', x: front.date, ctr: 1, ttl: 'd' });
   if (subject) frontBlocks.push({ t: 'p', x: subject, ctr: 1, ttl: 't' });
   if (front.ref) frontBlocks.push({ t: 'p', x: front.ref, ctr: 1, sm: 1 });
   if (front.note) frontBlocks.push({ t: 'p', x: front.note, ctr: 1, sm: 1, note: 1 });
-  const shift = frontBlocks.length;
-  const blocks = [...frontBlocks, ...out];
+  const cover = pre.map((b) => (front.kind ? { t: 'p', x: b.x.replace(/\s+/g, ' ').trim(), ctr: 1, sm: 1 } : { ...b }));
+  const shift = cover.length + frontBlocks.length;
+  const blocks = [...cover, ...frontBlocks, ...out];
   headings.forEach((h) => { h.block += shift; });
 
   // poziomy nagłówków
@@ -156,6 +170,6 @@ export function legalizeBlocks(input) {
   for (const e of entries) e.legal = true;
   return {
     blocks, entries,
-    meta: { title: [kindTxt, subject].filter(Boolean).join(' ') || 'Akt prawny', author: front.ref || '' },
+    meta: { title: [kindTxt, subject].filter(Boolean).join(' '), author: front.ref || '' },
   };
 }

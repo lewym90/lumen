@@ -5,7 +5,7 @@ import { openSheet } from '../ui.js';
 const label = (b) => {
   if (b.t === 'table') return '▦ tabela';
   if (b.t === 'img' || b.t === 'fig' || b.t === 'page') return b.t === 'page' ? `strona ${b.pg}` : (b.x || 'ilustracja');
-  const pre = b.art ? `Art. ${b.art}. ` : (b.o ? b.o + ' ' : '');
+  const pre = b.art ? `${b.ob || ''}${b.sg || 'Art.'} ${b.art}. ` : (b.o ? b.o + ' ' : '');
   return (pre + (b.x || '')).replace(/\s+/g, ' ').trim();
 };
 
