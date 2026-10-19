@@ -10,7 +10,7 @@ export function openPlan(id) { location.hash = '#/doc/' + id; }
 
 export async function renameDoc(meta) {
   const t = await promptDialog({ title: 'Zmień tytuł', value: meta.title, label: 'Tytuł dokumentu' });
-  if (t && t.trim()) { meta.title = t.trim(); await saveMeta(meta); toast('Zapisano nowy tytuł'); }
+  if (t && t.trim()) { meta.title = t.trim(); meta.titleEdited = true; await saveMeta(meta); toast('Zapisano nowy tytuł'); }
 }
 
 export async function deleteDoc(meta) {

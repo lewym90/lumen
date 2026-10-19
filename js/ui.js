@@ -134,6 +134,13 @@ export function coverUrl(meta) {
 const TYPE_LABEL = { pdf: 'PDF', epub: 'EPUB', docx: 'DOCX', txt: 'TXT', md: 'MD', html: 'HTML' };
 export function typeLabel(t) { return TYPE_LABEL[t] || t.toUpperCase(); }
 
+// długie wyrazy i długie tytuły dostają mniejszą czcionkę na okładce, żeby słowa nie łamały się w środku
+function titleScale(t) {
+  const L = Math.max(...String(t || '').split(/\s+/).map((w) => w.length), 1);
+  const a = Math.min(1, 11.5 / L), b = t && t.length > 70 ? 0.9 : 1;
+  return Math.max(0.7, a * b).toFixed(2);
+}
+
 export function coverEl(meta, { tilt = false } = {}) {
   const el = h('div', { class: 'cover', style: { '--h': meta.hue ?? 220 } });
   const url = coverUrl(meta);
@@ -144,7 +151,7 @@ export function coverEl(meta, { tilt = false } = {}) {
     el.append(h('div', { class: 'gen' },
       h('span', { class: 'badge' }, typeLabel(meta.type)),
       h('div', {},
-        h('div', { class: 't' }, meta.title),
+        h('div', { class: 't', style: { '--ts': titleScale(meta.title) } }, meta.title),
         meta.author ? h('div', { class: 'a' }, meta.author) : null),
       h('span', { class: 'glyph', html: ic('book-open') })));
   }

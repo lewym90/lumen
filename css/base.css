@@ -236,12 +236,12 @@ img, svg, canvas { display: block; max-width: 100%; }
 .cover::after { content: ''; position: absolute; inset: 0; z-index: 3; pointer-events: none; background: linear-gradient(105deg, rgba(255, 255, 255, .16) 0, rgba(255, 255, 255, 0) 12%, rgba(0, 0, 0, .0) 82%, rgba(0, 0, 0, .22) 100%), linear-gradient(180deg, rgba(255, 255, 255, .1), transparent 40%); }
 .cover::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 7%; z-index: 3; background: linear-gradient(90deg, rgba(0, 0, 0, .35), rgba(255, 255, 255, .12) 60%, transparent); pointer-events: none; }
 .cover img { width: 100%; height: 100%; object-fit: cover; }
-.cover .gen { position: absolute; inset: 0; padding: 14% 12% 12% 16%; display: flex; flex-direction: column; justify-content: space-between; color: #fff; background:
+.cover .gen { position: absolute; inset: 0; padding: 14% 8% 12% 14%; display: flex; flex-direction: column; justify-content: space-between; color: #fff; background:
   radial-gradient(120% 80% at 90% 0%, hsl(calc(var(--h) + 40) 80% 62% / .85), transparent 60%),
   radial-gradient(100% 90% at 0% 100%, hsl(calc(var(--h) - 30) 70% 38% / .95), transparent 62%),
   linear-gradient(160deg, hsl(var(--h) 55% 30%), hsl(calc(var(--h) + 25) 60% 14%)); }
 .cover .gen .badge { align-self: flex-start; font-size: 9px; letter-spacing: .18em; font-weight: 700; padding: 4px 8px; border-radius: 99px; background: rgba(255, 255, 255, .16); backdrop-filter: blur(6px); text-transform: uppercase; }
-.cover .gen .t { font-family: var(--font-display); font-weight: 650; line-height: 1.04; letter-spacing: -.01em; font-size: clamp(13px, 7.2cqw, 28px); text-wrap: balance; text-shadow: 0 2px 14px rgba(0, 0, 0, .35); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; }
+.cover .gen .t { font-family: var(--font-display); font-weight: 650; line-height: 1.04; letter-spacing: -.01em; font-size: calc(clamp(12px, 6cqw, 26px) * var(--ts, 1)); text-wrap: balance; text-shadow: 0 2px 14px rgba(0, 0, 0, .35); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow-wrap: break-word; hyphens: auto; }
 .cover .gen .a { font-size: 10px; opacity: .75; letter-spacing: .06em; margin-top: 7px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .cover .gen .glyph { position: absolute; right: -8%; bottom: -6%; width: 62%; opacity: .15; color: #fff; }
 .cover { container-type: inline-size; }

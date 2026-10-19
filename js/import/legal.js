@@ -566,7 +566,13 @@ export function parseLegal(pages, nPages = pages.length) {
   // nazwa dokumentu: dla obwieszczenia o tekście jednolitym — sam akt z załącznika
   const tg = titles.length > 1 && /^obwieszczenie$/i.test(titles[0].items[0].x) ? titles[1] : titles[0];
   const tt = tg ? tg.items.filter((it) => it.ttl !== 'd').map((it, i) => { const x = it.x.replace(/\s*\d{1,2}\)$/, ''); return i > 0 && x === x.toUpperCase() ? titleCase(x) : x; }).join(' ') : '';
-  const meta = { title: tt, author: title.ref || '' };
+  let author = title.ref || '';
+  if (!author) {
+    const poz = cover.map((c) => c.x.match(/^Poz\.\s*(\d+)/)).find(Boolean);
+    const yr = cover.map((c) => c.x.match(/(\d{4})\s*r\./)).find(Boolean);
+    if (poz && yr) author = `Dz. U. ${yr[1]} poz. ${poz[1]}`;
+  }
+  const meta = { title: tt, author };
   return { blocks, entries, meta, dateLine: tg && tg.items.find((it) => it.ttl === 'd')?.x };
 }
 

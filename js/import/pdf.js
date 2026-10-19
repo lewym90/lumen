@@ -800,7 +800,7 @@ export async function structurePages(pdf, pages, meta, n, onProgress = () => {})
     const lg = parseLegal(sc.pages, n);
     if (lg.blocks.length > 20) {
       onProgress({ page: n, pages: n, frac: 1, phase: 'Gotowe' });
-      return { meta: { ...meta, title: lg.meta.title || meta.title, author: lg.meta.author || meta.author }, blocks: lg.blocks, entries: lg.entries, scanned: false, pdf, legal: true, columns: sc.columns };
+      return { meta: { ...meta, title: lg.meta.title || meta.title, author: lg.meta.author }, blocks: lg.blocks, entries: lg.entries, scanned: false, pdf, legal: true, columns: sc.columns };
     }
   }
 

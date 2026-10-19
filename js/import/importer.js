@@ -101,7 +101,7 @@ async function parseByType(file, type, report) {
     if (detectLegalBlocks(parsed.blocks)) {
       const lg = legalizeBlocks(parsed.blocks);
       if (lg.blocks.length > 20) {
-        parsed = { ...parsed, blocks: lg.blocks, entries: lg.entries, legal: true, meta: { ...parsed.meta, title: lg.meta.title || parsed.meta.title, author: lg.meta.author || parsed.meta.author } };
+        parsed = { ...parsed, blocks: lg.blocks, entries: lg.entries, legal: true, meta: { ...parsed.meta, title: lg.meta.title || parsed.meta.title, author: lg.meta.author } };
       }
     }
   }
@@ -258,8 +258,10 @@ export async function reimportDocument(meta, onProgress = () => {}) {
   await db.put('content', { blocks: nb, chapters: nd.chapters, auto: JSON.parse(JSON.stringify(nd.chapters)), v: 1 }, meta.id);
   for (const a of parsed.assets || []) await db.put('assets', a.blob, `${meta.id}/${a.key}`);
   meta.words = nd.words; meta.chapterCount = nd.chapters.length; meta.prog = np; meta.auto = true; meta.pv = PARSER_V; meta.legal = !!parsed.legal;
+  if (parsed.legal) meta.author = parsed.meta.author || '';
   meta.pct = docProgress({ blocks: nb, chapters: nd.chapters, cw: nd.cw }, meta).pct;
-  if (parsed.meta?.title && meta.title === fileTitle) meta.title = nd.title;
+  // tytuł: odświeżamy, jeśli nie został zmieniony ręcznie (dawniej mógł wyjść ogólny „Akt prawny” albo tytuł z metadanych pliku)
+  if (parsed.meta?.title && (meta.title === fileTitle || (parsed.legal && !meta.titleEdited))) meta.title = nd.title;
   await saveMeta(meta);
   try { pdfObj?.destroy(); } catch { /* brak */ }
   dropDocCache();

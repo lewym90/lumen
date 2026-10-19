@@ -325,10 +325,26 @@ async function boot() {
   setTimeout(() => { splash.classList.add('gone'); setTimeout(() => splash.remove(), 900); }, wait);
 
   registerSW();
+  setTimeout(() => autoUpgrade().catch(() => { /* brak oryginału itp. */ }), 2500);
   window.addEventListener('keydown', (e) => {
     if (readerOpen) return;
     if ((e.key === 'o' || e.key === 'O') && (e.ctrlKey || e.metaKey)) { e.preventDefault(); pickFiles(); }
   });
+}
+
+// Dokumenty zaimportowane starszą wersją parsera (akty prawne, pliki z jednym „rozdziałem”) przetwarzamy ponownie w tle.
+// Postęp, zakładki i zakreślenia są zachowywane; pomijamy dokument otwarty w tej chwili.
+async function autoUpgrade() {
+  const { PARSER_V, reimportDocument } = await import('./import/importer.js');
+  const todo = listDocs().filter((m) => m.type === 'pdf' && !m.scanned && (m.pv || 0) < PARSER_V && (m.legal || (m.chapterCount || 0) <= 2 || /^akt prawny$/i.test(m.title)));
+  if (!todo.length) return;
+  toast(`Aktualizuję strukturę dokumentów (${todo.length})…`, { icon: 'refresh' });
+  let ok = 0;
+  for (const m of todo) {
+    if (location.hash.includes(m.id)) continue;
+    try { await reimportDocument(m); ok++; } catch { /* zostaje stara wersja */ }
+  }
+  if (ok) toast(`Zaktualizowano dokumenty: ${ok}`, { icon: 'check' });
 }
 
 function registerSW() {
