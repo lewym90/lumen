@@ -3,7 +3,7 @@ import { h, ic, greeting, plural, fmtMinutes, dayKey, fmtNum } from '../util.js'
 import { listDocs, loadDoc, stats, settings, streak, todaySeconds, lastDays, bus, docProgress, continueTarget, wordsToMinutes } from '../state.js';
 import { coverEl, ring, progressBar, attachTilt, countUp } from '../ui.js';
 import { chapterKicker, partLabel, minutesFor, planFor } from '../course.js';
-import { docCard, openDoc, openPlan } from './shared.js';
+import { docCard, openDoc, openPlan, startOver } from './shared.js';
 import { pickFiles, openAdd } from '../main.js';
 
 const WEEKDAYS = ['nd', 'pn', 'wt', 'śr', 'cz', 'pt', 'sb'];
@@ -81,7 +81,8 @@ async function heroCard(meta) {
       h('div', { class: 'hero-prog' }, progressBar(x.pct), h('span', {}, `${Math.round(p.pct * 100)}% przeczytane`)),
       h('div', { class: 'hero-actions' },
         h('button', { class: 'btn primary lg', onclick: () => openDoc(meta.id) }, started ? 'Czytaj dalej' : 'Zaczynamy', h('span', { html: ic('arrow-right') })),
-        h('button', { class: 'btn lg', onclick: () => openPlan(meta.id) }, h('span', { html: ic('layers') }), 'Spis rozdziałów'))));
+        h('button', { class: 'btn lg', onclick: () => openPlan(meta.id) }, h('span', { html: ic('layers') }), 'Spis rozdziałów')),
+      started ? h('button', { class: 'start-over', onclick: () => startOver(meta, () => { location.hash = '#/read/' + meta.id + '?c=0'; }) }, h('span', { html: ic('refresh') }), 'Zacznij od początku') : null));
   attachTilt(cover);
   return wrap;
 }

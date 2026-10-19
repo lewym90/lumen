@@ -4,7 +4,7 @@ import { getMeta, loadDoc, saveMeta, saveContent, docProgress, continueTarget, c
 import { sectionsOf, chapterEnd, buildWordIndex } from '../import/structure.js';
 import { coverEl, ring, progressBar, openMenu, openSheet, toast, confirmDialog, promptDialog, typeLabel, attachTilt, countUp } from '../ui.js';
 import { chapterKicker, partLabel, minutesFor, pageRange, planFor, finishEstimate } from '../course.js';
-import { openDoc, renameDoc, deleteDoc } from './shared.js';
+import { openDoc, renameDoc, deleteDoc, startOver } from './shared.js';
 import { pickBlock } from './blockpicker.js';
 import { openTagEditor } from './tags.js';
 import { PARSER_V } from '../import/importer.js';
@@ -300,7 +300,8 @@ export async function mount(root, { id }) {
             stat('layers', fmtNum(doc.chapters.length), plural(doc.chapters.length, 'rozdział', 'rozdziały', 'rozdziałów')),
             stat('clock', fmtMinutes(wordsToMinutes(p.total)), 'czytania'),
             stat('check-circle', `${p.done}/${doc.chapters.length}`, 'przeczytane')),
-          h('div', { class: 'dh-actions' }, cta, finished ? null : h('span', { class: 'dim next-hint' }, `${chapterKicker(doc.chapters[cIdx]) || 'Dalej'}: ${doc.chapters[cIdx].title}`))),
+          h('div', { class: 'dh-actions' }, cta, finished ? null : h('span', { class: 'dim next-hint' }, `${chapterKicker(doc.chapters[cIdx]) || 'Dalej'}: ${doc.chapters[cIdx].title}`),
+            started && !finished ? h('button', { class: 'start-over', onclick: () => startOver(meta, () => toRead(0)) }, h('span', { html: ic('refresh') }), 'Zacznij od początku') : null)),
         h('div', { class: 'dh-ring' }, rg)),
       ...notice,
       h('div', { class: 'detail-cols' },

@@ -61,3 +61,13 @@ export function docCard(meta, { onChange, compact = false } = {}) {
 }
 
 export function fmtWords(n) { return `${fmtNum(n)} ${plural(n, 'słowo', 'słowa', 'słów')}`; }
+
+// „Zacznij od początku”: wraca do początku dokumentu; postęp rozdziałów, zakreślenia i zakładki zostają
+export async function startOver(meta, go) {
+  const ok = await confirmDialog({
+    title: 'Zacząć od początku?',
+    text: 'Otworzę dokument na pierwszym rozdziale. Zakreślenia, notatki i oznaczone jako przeczytane rozdziały zostaną, ale miejsce, w którym skończyłeś, przesunie się na początek.',
+    ok: 'Zacznij od początku',
+  });
+  if (ok) go();
+}

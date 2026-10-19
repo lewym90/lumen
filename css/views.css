@@ -400,3 +400,8 @@ kbd { min-width: 44px; text-align: center; padding: 4px 9px; border-radius: 9px;
   .head-btns .btn { flex: 1; justify-content: center; white-space: nowrap; }
   .head-btns #gs-link { flex: 0 0 auto; }
 }
+.start-over { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; margin-top: 2px; padding: 6px 4px; font-size: 13px; font-weight: 500; color: var(--text-3); border-radius: 8px; transition: color .2s; }
+.start-over:hover, .start-over:focus-visible { color: var(--text-2); }
+.start-over .ic { width: 14px; height: 14px; }
+.hero-body > .start-over { margin-top: 6px; }
+.dh-actions .start-over { margin-left: 2px; }
