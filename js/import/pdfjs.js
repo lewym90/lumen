@@ -1,3 +1,4 @@
+import '../polyfills.js';
 // Ładowanie pdf.js (lokalnie, z katalogu vendor — działa offline)
 let lib;
 export async function loadPdfjs() {

@@ -1,5 +1,5 @@
 /* Lumen — service worker: działanie offline, aktualizacje i przyjmowanie plików z „Udostępnij” */
-const VERSION = 'lumen-v1.0.1';
+const VERSION = 'lumen-v1.0.2';
 const SHELL = `${VERSION}-shell`;
 const RUNTIME = `${VERSION}-runtime`;
 const SHARE = 'lumen-share';
@@ -44,6 +44,7 @@ const PRECACHE = [
  "js/import/text.js",
  "js/import/textbuild.js",
  "js/main.js",
+ "js/polyfills.js",
  "js/reader/appearance.js",
  "js/reader/pageview.js",
  "js/reader/reader.js",
