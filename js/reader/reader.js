@@ -8,7 +8,7 @@ import { toast, openSheet, openMenu, ring, sparkBurst, closeMenu, promptDialog }
 import { applyReadingVars, buildAppearance } from './appearance.js';
 import { chapterBodyHtml, openerHtml, textHtml, blockHtml } from './render.js';
 import { openPageViewer, openFigureZoom, observeScanPages, observeFigures, releasePdf } from './pageview.js';
-import { Narrator, ttsSupported, loadVoices, pickVoice } from './tts.js';
+import { Narrator, ttsSupported, loadVoices, pickVoice, voiceQuality, qualityLabel, speakSample } from './tts.js';
 
 import { initOwnSelection } from './selection.js';
 import { HL_COLORS, hlLabel, editLabels, buildExport, saveExport } from './labels.js';
@@ -1066,7 +1066,7 @@ function spokenLabel(i) {
 function ensureNarrator() {
   if (R.narrator) return R.narrator;
   const n = new Narrator({
-    isSpeakable, text: (i) => R.doc.blocks[i].x, pre: spokenLabel,
+    isSpeakable, text: (i) => R.doc.blocks[i].x, pre: spokenLabel, isHeading: (i) => R.doc.blocks[i].t === 'h',
     onBlock: (i) => {
       if (R.sleepAt && Date.now() > R.sleepAt) { R.sleepAt = 0; setTimeout(() => { R.narrator?.stop(); toast('Minutnik: zatrzymano czytanie', { icon: 'headphones' }); }, 0); return; }
       mediaMeta();
@@ -1142,8 +1142,7 @@ function paintListen(st) {
 function openListenSettings(n) {
   const voices = (R.voices || []).slice();
   const isPl = (v) => v.lang.toLowerCase().startsWith('pl');
-  const rank = (v) => (isPl(v) ? 0 : 1) * 10 + (/natural|neural|premium|enhanced|google/i.test(v.name) ? 0 : 1);
-  voices.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
+  voices.sort((a, b) => (isPl(b) ? 1 : 0) - (isPl(a) ? 1 : 0) || voiceQuality(b) - voiceQuality(a) || a.name.localeCompare(b.name));
   const body = h('div', { class: 'ls' });
   const paint = () => {
     const rows = [];
@@ -1166,9 +1165,16 @@ function openListenSettings(n) {
     rows.push(h('div', { class: 'ls-row' }, h('span', {}, 'Głos')));
     if (!voices.length) rows.push(h('p', { class: 'muted' }, 'Brak głosów w tym urządzeniu. Zainstaluj polski głos w ustawieniach systemu (Dostępność → Mowa).'));
     else if (!voices.some(isPl)) rows.push(h('p', { class: 'muted ls-warn' }, 'Nie znalazłem polskiego głosu. Dodaj go w ustawieniach systemu — tekst polski czytany głosem obcym brzmi źle.'));
+    const plBest = Math.max(0, ...voices.filter(isPl).map(voiceQuality));
+    if (voices.some(isPl) && plBest < 2) {
+      const ios = /iPhone|iPad|Mac/i.test(navigator.userAgent);
+      rows.push(h('p', { class: 'muted ls-warn' }, ios
+        ? 'Masz tylko podstawowy polski głos, dlatego brzmi mechanicznie. Pobierz lepszy: Ustawienia → Dostępność → Treści czytane na głos → Głosy → Polski → wybierz „Zosia” lub „Ewa” w wersji Rozszerzony albo Premium. Potem wybierz go tutaj.'
+        : 'Masz tylko podstawowy polski głos. W Chrome/Edge na komputerze są głosy „Google polski” lub „Microsoft … Online (Natural)”, a w ustawieniach Androida (Mowa) można pobrać głos wyższej jakości. Potem wybierz go tutaj.'));
+    }
     const vl = h('div', { class: 'ls-voices' });
-    voices.slice(0, 40).forEach((v) => vl.append(h('button', { class: 'ls-v' + (n.voice === v ? ' on' : ''), onclick: () => { n.setVoice(v); setSetting('ttsVoice', v.voiceURI); paint(); } },
-      h('span', { class: 'ls-vn' }, v.name.replace(/Microsoft /, '')), h('small', {}, v.lang + (v.localService ? '' : ' · online')), n.voice === v ? h('i', { html: ic('check') }) : null)));
+    voices.slice(0, 40).forEach((v) => vl.append(h('button', { class: 'ls-v' + (n.voice === v ? ' on' : ''), onclick: () => { n.setVoice(v); setSetting('ttsVoice', v.voiceURI); if (n.state !== 'playing') speakSample(v, n.rate); paint(); } },
+      h('span', { class: 'ls-vn' }, v.name.replace(/Microsoft /, '')), h('small', {}, qualityLabel(v) + ' · ' + v.lang + (v.localService ? '' : ' · online')), n.voice === v ? h('i', { html: ic('check') }) : null)));
     rows.push(vl);
     body.replaceChildren(...rows);
   };

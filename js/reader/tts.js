@@ -43,6 +43,7 @@ const EXPAND = [
   [/(\d)\s*r\.(?=\s|$|[,;)])/g, '$1 roku'], [/(\d)\s*zł(?![A-Za-ząćęłńóśźż])/g, '$1 złotych'], [/(\d)\s*%/g, '$1 procent'],
   [/(\d)\s*(?:m2|m²)/g, '$1 metrów kwadratowych'], [/\bmln\b\.?/gi, 'milionów'], [/\btys\./gi, 'tysięcy'],
   [/(\d+[a-z]?)\s*[–—]\s*(\d+)/g, 'od $1 do $2'],
+  [/\s[–—]\s/g, ', '],
   [/\s*\((?:uchylony|pominięty|pominięte)\)/gi, ' uchylony'],
 ];
 export function expandSpeech(t, lang = 'pl') {
@@ -84,10 +85,34 @@ export function loadVoices() {
   });
 }
 
+// Jakość głosu: 3 = premium/neuronowy, 2 = rozszerzony/Google/Microsoft Online, 1 = zwykły, 0 = głos nowościowy
+const NOVELTY = /\b(albert|bad news|bahh|bells|boing|bubbles|cellos|good news|jester|organ|superstar|trinoids|whisper|wobble|zarvox|fred|junior|ralph|kathy|princess|agnes|grandma|grandpa|rocko|shelley|flo|eddy|reed|sandy)\b/i;
+export function voiceQuality(v) {
+  const n = v.name || '';
+  if (NOVELTY.test(n)) return 0;
+  if (/premium|natural|neural|wavenet|studio|siri/i.test(n)) return 3;
+  if (/enhanced|rozszerzon|google|online|microsoft/i.test(n) || (!v.localService && /pl/i.test(v.lang))) return 2;
+  return 1;
+}
+export function qualityLabel(v) {
+  const q = voiceQuality(v);
+  return q >= 3 ? 'Premium' : q === 2 ? 'Wysoka jakość' : q === 1 ? 'Podstawowy' : 'Nowościowy';
+}
+
 export function pickVoice(voices, pref, lang = 'pl') {
   if (pref) { const v = voices.find((x) => x.voiceURI === pref || x.name === pref); if (v) return v; }
-  const pl = voices.filter((v) => v.lang.toLowerCase().startsWith(lang));
-  return pl.find((v) => /google|natural|neural|premium|enhanced/i.test(v.name)) || pl[0] || voices.find((v) => v.default) || voices[0] || null;
+  const pl = voices.filter((v) => v.lang.toLowerCase().replace('_', '-').startsWith(lang));
+  const best = pl.slice().sort((a, b) => voiceQuality(b) - voiceQuality(a) || (b.localService ? 1 : 0) - (a.localService ? 1 : 0))[0];
+  return best || voices.find((v) => v.default) || voices[0] || null;
+}
+
+export function speakSample(voice, rate = 1) {
+  if (!ttsSupported) return;
+  synth.cancel();
+  const u = new SpeechSynthesisUtterance('Artykuł pierwszy. Ustawa określa zasady gospodarowania nieruchomościami, w tym ich nabywanie i zbywanie.');
+  if (voice) { u.voice = voice; u.lang = voice.lang; } else u.lang = 'pl-PL';
+  u.rate = rate;
+  synth.speak(u);
 }
 
 export class Narrator {
@@ -120,8 +145,15 @@ export class Narrator {
     return i;
   }
 
-  _enterBlock(i) {
+  _enterBlock(i, gap = 0) {
     if (i >= this.end) { this._finish(); return; }
+    if (gap > 0) {
+      // krótka cisza między akapitami (dłuższa po nagłówku) – mowa brzmi naturalniej
+      const tk = this.token;
+      this.cur = i;
+      setTimeout(() => { if (tk === this.token && this.state === 'playing') this._enterBlock(i, 0); }, gap);
+      return;
+    }
     this.cur = i;
     this.sents = sentences(this.host.text(i));
     const pre = this.host.pre ? this.host.pre(i) : '';
@@ -133,7 +165,7 @@ export class Narrator {
 
   _speakSentence() {
     if (this.state !== 'playing') return;
-    if (this.si >= this.sents.length) { this._enterBlock(this._nextSpeakable(this.cur + 1)); return; }
+    if (this.si >= this.sents.length) { const hd = this.host.isHeading && this.host.isHeading(this.cur); this._enterBlock(this._nextSpeakable(this.cur + 1), hd ? 650 : 280); return; }
     const sn = this.sents[this.si];
     const lang = (this.voice && this.voice.lang) || 'pl-PL';
     const chunks = chunkSpeech(expandSpeech(sn.t.trim(), lang));
